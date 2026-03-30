@@ -271,7 +271,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
   ].filter(Boolean).join('\n');
 
   const messages = [{ role: 'user', content: texto||'(mensagem)' }];
-  let cache = null, final = '';
+  let cache = null, listaCache = null, final = '';
 
   for (let iter = 0; iter < 8; iter++) {
     const resp = await client.messages.create({ model:'claude-haiku-4-5-20251001', max_tokens:1024, system, tools:TOOLS, messages });
@@ -302,7 +302,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
             data:inp.data, hora:inp.hora, prioridade:inp.prioridade||'Normal',
             observacao:inp.observacao, grupo:inp.grupo||grupo });
           res = '✅ "'+inp.titulo+'" criada!';
-          cache = null;
+          cache = null; listaCache = null;
 
         } else if (blk.name === 'concluir_tarefas') {
           if (!cache) cache = await buscarTarefas();
@@ -402,6 +402,6 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ─── Health ────────────────────────────────────────────────────────────────────
-app.get('/health', (_, res) => res.json({ status:'ok', service:'JARVIS', uptime:process.uptime() }));
+app.get('/health', (_, res) => res.json({ status:'ok', service:'JARVIS v2.1', uptime:process.uptime() }));
 
 app.listen(PORT, () => console.log('🤖 JARVIS online | porta '+PORT));
