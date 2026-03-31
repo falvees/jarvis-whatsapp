@@ -59,12 +59,19 @@ async function notionReq(path, method, body) {
 }
 
 async function buscarTarefas() {
-  const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', {
-    filter: { property: 'Status', status: { does_not_equal: 'Done' } },
-    sorts: [{ timestamp: 'created_time', direction: 'descending' }],
-    page_size: 50
-  });
-  return d.results || [];
+  // Retry em caso de resultado vazio (timing issue com Notion API)
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', {
+      filter: { property: 'Status', status: { does_not_equal: 'Done' } },
+      sorts: [{ timestamp: 'created_time', direction: 'descending' }],
+      page_size: 50
+    });
+    const results = d.results || [];
+    if (results.length > 0 || tentativa === 2) return results;
+    // Se veio vazio, aguardar 500ms e tentar novamente
+    await new Promise(res => setTimeout(res, 500));
+  }
+  return [];
 }
 
 async function criarTarefa({ titulo, responsavel, data, hora, prioridade, observacao, grupo }) {
@@ -307,7 +314,7 @@ async function enviarMensagem(jid, texto, mencionar) {
     path = '/message/sendText/' + INSTANCE;
     bodyObj = {
       number: jid,
-      text: '🤖 ' + texto + '\n@553491201226',
+      text: '🤖 ' + texto,
       mentioned: [FELIPE_LID]  // LID = formato interno WhatsApp para notificação
     };
     console.log('[SEND] mencionando:', FELIPE_JID);
