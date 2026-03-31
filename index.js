@@ -746,8 +746,8 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
 
   // Se a IA reformatou lista ou resumo, usar o texto direto da ferramenta
   // Se a IA reformatou: usar resultado direto da ferramenta
-  const isListaCorreta = final.includes('📋 *Tarefas ·') || final.includes('🌅 *Resumo') || final.includes('✅ Nenhuma tarefa pendente');
-  if (listaCache && !isListaCorreta) {
+  // listaCache SEMPRE prevalece — evita IA reformatar/separar em múltiplos blocos
+  if (listaCache) {
     final = listaCache;
   }
   // Se IA reformatou resposta de criação: usar formato clean direto
