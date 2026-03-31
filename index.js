@@ -229,17 +229,27 @@ async function transcreverAudio(buf) {
 // ─── Enviar WhatsApp ───────────────────────────────────────────────────────────
 async function enviarMensagem(jid, texto, mencionar) {
   const evoUrl = new URL(EVOLUTION_URL);
-  // Em grupos, usar @all para notificar todos os participantes
   const isGroup = jid.endsWith('@g.us');
-  const bodyObj = { number: jid, text: '🤖 ' + texto };
-  if (mencionar && isGroup) {
-    bodyObj.mentionsEveryOne = true; // Evolution API: menciona @all
+  // Usar endpoint correto para mensagem com menção
+  let path, bodyObj;
+  if (mencionar && isGroup && FELIPE_JID) {
+    // Endpoint de menção da Evolution API v2
+    path = '/message/sendText/' + INSTANCE;
+    bodyObj = {
+      number: jid,
+      text: '🤖 ' + texto,
+      mentioned: [FELIPE_JID]  // formato correto Evolution API
+    };
+    console.log('[SEND] mencionando:', FELIPE_JID);
+  } else {
+    path = '/message/sendText/' + INSTANCE;
+    bodyObj = { number: jid, text: '🤖 ' + texto };
   }
   const body = JSON.stringify(bodyObj);
   await httpReq({
     protocol: evoUrl.protocol, hostname: evoUrl.hostname,
     port: evoUrl.port||(evoUrl.protocol==='http:'?80:443),
-    path: '/message/sendText/'+INSTANCE, method: 'POST',
+    path, method: 'POST',
     headers: {'apikey':EVOLUTION_KEY,'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}
   }, body);
 }
