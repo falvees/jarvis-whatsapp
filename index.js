@@ -414,6 +414,8 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     isAudio ? '⚠️ Mensagem transcrita de ÁUDIO — interprete mesmo com pequenos erros.' : '',
     '',
     'Entenda QUALQUER linguagem natural: gírias, erros, abreviações, informal.',
+    'Tipos de item: Tarefa (padrão), Nota (📝 anotação), Ideia (💡 criativa), Lembrete (⏰ com data).',
+    'Exemplos tipo: "anota aí..."→Nota, "tive uma ideia..."→Ideia, "me lembra amanhã..."→Lembrete.',
     'Exemplos: "bora fechar tudo" = concluir todas, "mete aí reunião amanhã" = criar tarefa.',
     'Se múltiplos itens a criar, chame criar_tarefa UMA VEZ POR ITEM.',
     'Chame buscar_tarefas SEMPRE antes de listar, concluir ou atualizar.',
