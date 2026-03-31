@@ -458,7 +458,7 @@ const TOOLS = [
 async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
   const hoje = new Date().toISOString().slice(0,10);
   const system = [
-    'Você é JARVIS, assistente pessoal inteligente do '+remetente+' via WhatsApp.',
+    'Você é Felps IA, assistente inteligente de gestão de tarefas da Felps Tech, via WhatsApp.',
     'Data de hoje: '+hoje+' | Grupo: '+grupo+' ('+grupoNome+')',
     isAudio ? '⚠️ Mensagem transcrita de ÁUDIO — interprete mesmo com pequenos erros.' : '',
     '',
@@ -740,7 +740,7 @@ app.post('/deploy-hook', async (req, res) => {
   } catch(e) { console.error('[DEPLOY ERROR]', e.message); }
 });
 
-app.get('/health', (_, res) => res.json({ status:'ok', service:'JARVIS v2.1', uptime:process.uptime() }));
+app.get('/health', (_, res) => res.json({ status:'ok', service:'Felps IA v1.0', uptime:process.uptime() }));
 
 // ─── Resumo automático às 9h ─────────────────────────────────────────────
 function agendarResumo() {
@@ -766,4 +766,4 @@ function agendarResumo() {
 }
 agendarResumo();
 
-app.listen(PORT, () => console.log('🤖 JARVIS v2 online | porta '+PORT));
+app.listen(PORT, () => console.log('🤖 Felps IA v1.0 online | porta '+PORT));
