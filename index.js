@@ -198,7 +198,9 @@ function formatarLista(tarefas, tituloCustom) {
   const pw = p => { const n=norm(p||''); return n.includes('muito')?0:n.includes('urgente')?1:2; };
   const sorted = [...tarefas].sort((a,b) => pw(a.properties?.Prioridade?.select?.name)-pw(b.properties?.Prioridade?.select?.name));
   const titulo = tituloCustom ? tituloCustom.charAt(0).toUpperCase()+tituloCustom.slice(1) : 'Tarefas';
-  let txt = '📋 *'+titulo+' · '+sorted.length+' aberta(s)*\n';
+  const qtd = sorted.length;
+  const plural = qtd === 1 ? 'aberta' : 'abertas';
+  let txt = '📋 *'+titulo+' · '+qtd+' '+plural+'*\n';
   sorted.forEach((t,i) => {
     const titulo = t.properties?.Tarefa?.title?.[0]?.text?.content||'-';
     const resp   = t.properties?.Responsavel?.rich_text?.[0]?.text?.content||'-';
@@ -489,6 +491,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Para listar por tipo (notas/ideias/lembretes/tarefas): use listar_por_tipo. Ex: "mostrar notas"→listar_por_tipo(tipo:Nota).',
     'SEGURANÇA: O grupo de uma tarefa é SEMPRE o grupo de origem da mensagem. NUNCA use grupo diferente.',
     'IDs fixos: cada tarefa tem #ID (ex: #42). Aceite "#42" e "42" como identificadores.',
+    'Ao arquivar/concluir por nome: remova palavras genéricas como "tarefa","nota","ideia" do identificador. Ex: "apagar tarefa cortar cabelo"→identificador:"cortar cabelo".',
     '',
     'REGRAS:',
     '- LISTAR (tarefas/lista): chame buscar_tarefas e retorne SEU RESULTADO EXATO, sem alterar nada. NUNCA resuma, reformate ou reescreva a lista.',
@@ -618,7 +621,12 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
                 // Se não achou, usar posição na lista
                 else if (n>0&&n<=cache.length) found.push(cache[n-1]);
               } else {
-                found.push(...cache.filter(t=>norm(t.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(id))));
+                // Fuzzy: todas as palavras do termo devem aparecer no título
+            const words = norm(id).split(/\s+/).filter(w=>w.length>2);
+            found.push(...cache.filter(t=>{
+              const tit = norm(t.properties?.Tarefa?.title?.[0]?.text?.content||'');
+              return words.length>0 && words.every(w=>tit.includes(w));
+            }));
               }
             }
           }
@@ -643,7 +651,11 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
             if (!tArq && nArq > 0 && nArq <= cacheArq.length) tArq = cacheArq[nArq-1];
           } else {
             const termo = (blk.input.identificador||'').replace(/^#/,'').trim();
-            tArq = cacheArq.find(x => norm(x.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(termo)));
+            const wordsArq = norm(termo).split(/\s+/).filter(w=>w.length>2);
+            tArq = cacheArq.find(x => {
+              const tit = norm(x.properties?.Tarefa?.title?.[0]?.text?.content||'');
+              return wordsArq.length>0 && wordsArq.every(w=>tit.includes(w));
+            });
           }
           if (!tArq) { res = '❌ Tarefa não encontrada.'; }
           else {
@@ -673,8 +685,17 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
         } else if (blk.name === 'atualizar_tarefa') {
           if (!cache) cache = await buscarTarefas(grupo);
           const n = parseInt(blk.input.identificador);
-          const t = !isNaN(n)&&n>0&&n<=cache.length ? cache[n-1]
-            : cache.find(x=>norm(x.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(blk.input.identificador)));
+          const t = !isNaN(n)&&n>0&&n<=cache.length ? cache[n-1] : (() => {
+            // Tentar por ID do sistema primeiro
+            const porId = cache.find(x => x.properties?.ID?.number === n);
+            if (porId) return porId;
+            // Fuzzy: todas as palavras presentes
+            const words = norm(blk.input.identificador||'').split(/\s+/).filter(w=>w.length>2);
+            return cache.find(x => {
+              const tit = norm(x.properties?.Tarefa?.title?.[0]?.text?.content||'');
+              return words.length>0 && words.every(w=>tit.includes(w));
+            });
+          })();
           if (!t) { res='❌ Tarefa não encontrada.'; }
           else {
             await atualizarTarefa(t.id, blk.input.status||'In progress', blk.input.observacao);
