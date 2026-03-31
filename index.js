@@ -59,8 +59,8 @@ async function notionReq(path, method, body) {
   return JSON.parse(r.body);
 }
 
-async function buscarTarefas(grupoFiltro, tipoFiltro) {
-  // tipoFiltro: 'Tarefa', 'Nota', 'Ideia', 'Lembrete' — filtra pelo campo Origem
+async function buscarTarefas(grupoFiltro, tipoFiltros) {
+  // tipoFiltros: string ou array ['Tarefa','Nota'] — filtra pelo campo Origem
   for (let tentativa = 0; tentativa < 3; tentativa++) {
     const conditions = [
       { property: 'Status', status: { does_not_equal: 'Done' } }
@@ -75,11 +75,12 @@ async function buscarTarefas(grupoFiltro, tipoFiltro) {
     };
     const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', queryBody);
     let results = d.results || [];
-    // Filtrar por tipo localmente (tipo está no campo Origem como "WhatsApp | Tipo")
-    if (tipoFiltro && results.length > 0) {
+    // Filtrar por tipo(s) localmente (campo Origem: "WhatsApp | Tipo")
+    if (tipoFiltros && results.length > 0) {
+      const tipos = Array.isArray(tipoFiltros) ? tipoFiltros : [tipoFiltros];
       results = results.filter(r => {
         const origem = r.properties?.Origem?.rich_text?.[0]?.text?.content || '';
-        return origem.toLowerCase().includes(tipoFiltro.toLowerCase());
+        return tipos.some(t => origem.toLowerCase().includes(t.toLowerCase()));
       });
     }
     if (results.length > 0 || tentativa === 2) return results;
@@ -386,13 +387,13 @@ async function enviarMensagem(jid, texto) {
 const TOOLS = [
   {
     name: 'buscar_tarefas',
-    description: 'Busca itens pendentes com filtros opcionais. Use para: listar, mostrar notas/ideias/lembretes/tarefas, ver por responsável, ver urgentes, etc. A IA monta os filtros dinamicamente.',
+    description: 'Busca itens pendentes com filtros opcionais. SEMPRE use tipo(s) baseado no que o usuário pediu: "tarefas"→["Tarefa"], "notas"→["Nota"], "ideias"→["Ideia"], "lembretes"→["Lembrete"], "tarefas e ideias"→["Tarefa","Ideia"], sem filtro só se pedir "tudo" ou "lista geral".',
     input_schema: {
       type: 'object',
       properties: {
-        tipo:        { type: 'string', enum: ['Tarefa','Nota','Ideia','Lembrete'], description: 'Filtrar por tipo. Ex: "mostrar notas"→Nota, "ver ideias"→Ideia' },
+        tipos:       { type: 'array', items: { type: 'string', enum: ['Tarefa','Nota','Ideia','Lembrete'] }, description: 'Array de tipos a filtrar. Ex: "tarefas"→["Tarefa"], "notas"→["Nota"], "tarefas e ideias"→["Tarefa","Ideia"]. Omitir só se pedir tudo.' },
         responsavel: { type: 'string', description: 'Filtrar por responsável. Ex: "tarefas do Felipe"→Felipe' },
-        prioridade:  { type: 'string', enum: ['Normal','Urgente','Muito Urgente'], description: 'Filtrar por prioridade. Ex: "urgentes"→Urgente' }
+        prioridade:  { type: 'string', enum: ['Normal','Urgente','Muito Urgente'], description: 'Filtrar por prioridade.' }
       },
       required: []
     }
@@ -485,8 +486,14 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Exemplos: "bora fechar tudo" = concluir todas, "mete aí reunião amanhã" = criar tarefa.',
     'Se múltiplos itens a criar, chame criar_tarefa UMA VEZ POR ITEM.',
     'Chame buscar_tarefas SEMPRE antes de listar/concluir/atualizar.',
-    'buscar_tarefas aceita filtros opcionais: tipo (Tarefa/Nota/Ideia/Lembrete), responsavel, prioridade.',
-    'Ex: "mostrar notas"→tipo:Nota | "tarefas urgentes do Felipe"→tipo:Tarefa+prioridade:Urgente+responsavel:Felipe | "ver ideias"→tipo:Ideia',
+    'FILTRO DE TIPO OBRIGATÓRIO: SEMPRE passe o campo "tipos" em buscar_tarefas baseado no comando:',
+    '  "tarefas" → tipos:["Tarefa"]',
+    '  "notas" ou "anotações" → tipos:["Nota"]',
+    '  "ideias" → tipos:["Ideia"]',
+    '  "lembretes" → tipos:["Lembrete"]',
+    '  "tarefas e ideias" → tipos:["Tarefa","Ideia"]',
+    '  "tudo", "lista geral", "o que tem" → omitir tipos (sem filtro)',
+    'Também aceita: responsavel (nome) e prioridade (Normal/Urgente/Muito Urgente).','''
     'Para buscar por conteúdo: buscar_por_conteudo. Para apagar/arquivar: arquivar_tarefa.',
     'Para listar por tipo (notas/ideias/lembretes/tarefas): use listar_por_tipo. Ex: "mostrar notas"→listar_por_tipo(tipo:Nota).',
     'SEGURANÇA: O grupo de uma tarefa é SEMPRE o grupo de origem da mensagem. NUNCA use grupo diferente.',
@@ -555,10 +562,11 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
       try {
         if (blk.name === 'buscar_tarefas') {
           const inp_b = blk.input || {};
-          cache = await buscarTarefas(grupo, inp_b.tipo);
-          if (!cache.length) {
+          const tiposFiltro = inp_b.tipos || (inp_b.tipo ? [inp_b.tipo] : null);
+          cache = await buscarTarefas(grupo, tiposFiltro);
+          if (!cache.length && tiposFiltro) {
             await new Promise(r => setTimeout(r, 2000));
-            cache = await buscarTarefas(grupo, inp_b.tipo);
+            cache = await buscarTarefas(grupo, tiposFiltro);
           }
           // Aplicar filtros adicionais localmente
           let filtrado = cache;
@@ -571,7 +579,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           }
           // Título do filtro para o cabeçalho
           const partes = [];
-          if (inp_b.tipo) partes.push(inp_b.tipo+'s');
+          if (tiposFiltro?.length) partes.push(tiposFiltro.map(t=>t+'s').join(' e '));
           if (inp_b.responsavel) partes.push('do '+inp_b.responsavel);
           if (inp_b.prioridade) partes.push(inp_b.prioridade.toLowerCase()+'s');
           const tituloFiltro = partes.length ? partes.join(' ') : null;
