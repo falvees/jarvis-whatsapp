@@ -182,13 +182,14 @@ function decryptAudio(encBuf, mediaKeyObj) {
 async function transcreverAudio(buf) {
   const b='JARVIS'+Date.now(), CR='\r\n';
   const body = Buffer.concat([
-    Buffer.from('--'+b+CR+'Content-Disposition: form-data; name="file"; filename="audio.ogg"'+CR+'Content-Type: audio/ogg'+CR+CR),
+    Buffer.from('--'+b+CR+'Content-Disposition: form-data; name="file"; filename="audio.ogg"'+CR+'Content-Type: audio/ogg; codecs=opus'+CR+CR),
     buf,
     Buffer.from(CR+'--'+b+CR+'Content-Disposition: form-data; name="model"'+CR+CR+'whisper-large-v3'+CR),
     Buffer.from('--'+b+CR+'Content-Disposition: form-data; name="prompt"'+CR+CR+'mensagem em português brasileiro'+CR),
     Buffer.from('--'+b+CR+'Content-Disposition: form-data; name="response_format"'+CR+CR+'json'+CR),
     Buffer.from('--'+b+'--'+CR)
   ]);
+  console.log('[AUDIO] Enviando para Groq: buf_decrypted='+buf.length+'bytes body='+body.length+'bytes');
   const r = await httpReq({hostname:'api.groq.com',path:'/openai/v1/audio/transcriptions',method:'POST',
     headers:{'Authorization':'Bearer '+GROQ_KEY,'Content-Type':'multipart/form-data; boundary='+b,'Content-Length':body.length}},body);
   if (r.status!==200) throw new Error('Groq '+r.status+': '+r.body.slice(0,200));
