@@ -521,7 +521,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
             res = found.length===cache.length&&found.length>1 ? '✅ Todas as '+found.length+' concluídas! 🎉'
                 : found.length===1 ? '✅ "'+tits[0]+'" concluída!'
                 : '✅ '+found.length+' concluídas:\n'+tits.map(t=>'  · '+t).join('\n');
-            cache = null;
+            cache = null; listaCache = null; criacaoCache = null;
           }
 
         } else if (blk.name === 'atualizar_tarefa') {
@@ -534,7 +534,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
             await atualizarTarefa(t.id, blk.input.status||'In progress', blk.input.observacao);
             const titulo = t.properties?.Tarefa?.title?.[0]?.text?.content||'tarefa';
             res = '🔄 "'+titulo+'" atualizada!' + (blk.input.observacao?' Obs: '+blk.input.observacao:'');
-            cache = null;
+            cache = null; listaCache = null; criacaoCache = null;
           }
         }
       } catch(e) { res = '(erro: '+e.message.slice(0,60)+')'; }
