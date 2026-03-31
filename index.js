@@ -363,7 +363,7 @@ const TOOLS = [
       properties: {
         titulo:      { type: 'string', description: 'Título do item' },
         tipo:        { type: 'string', enum: ['Tarefa','Nota','Ideia','Lembrete'], description: 'Tipo (padrão: Tarefa). Nota=anotação, Ideia=criativa, Lembrete=com data' },
-        responsavel: { type: 'string', description: 'Nome do responsável' },
+        responsavel: { type: 'string', description: 'Nome do responsável. EXTRAIA da mensagem se mencionado (ex: responsavel João, pra Adriane, para o Pedro)' },
         data:        { type: 'string', description: 'YYYY-MM-DD' },
         hora:        { type: 'string', description: 'HH:MM' },
         prioridade:  { type: 'string', enum: ['Normal','Urgente','Muito Urgente'] },
@@ -415,6 +415,8 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     '',
     'Entenda QUALQUER linguagem natural: gírias, erros, abreviações, informal.',
     'Tipos de item: Tarefa (padrão), Nota (📝 anotação), Ideia (💡 criativa), Lembrete (⏰ com data).',
+    'Responsável: SEMPRE extraia da mensagem se mencionado. Ex: "responsavel adriane"→responsavel:"Adriane", "pra o João"→responsavel:"João", "para Marcos"→responsavel:"Marcos". Se não mencionado, use o remetente.',
+    'Concluir: quando pedir "concluir todas", "fechar tudo", "bora fechar", "conclui tudo" → passe identificadores:["todas"].',
     'Exemplos tipo: "anota aí..."→Nota, "tive uma ideia..."→Ideia, "me lembra amanhã..."→Lembrete.',
     'Exemplos: "bora fechar tudo" = concluir todas, "mete aí reunião amanhã" = criar tarefa.',
     'Se múltiplos itens a criar, chame criar_tarefa UMA VEZ POR ITEM.',
@@ -501,7 +503,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
         } else if (blk.name === 'concluir_tarefas') {
           if (!cache) cache = await buscarTarefas(grupo);
           const ids = blk.input.identificadores||[];
-          const isAll = ids.some(x=>/^(todas?|tudo|all)$/i.test(x.trim()));
+          const isAll = ids.some(x=>/^(todas?|tudo|all|everything)$/i.test(x.trim()));
           let found = [];
           if (isAll) { found = [...cache]; }
           else {
@@ -554,8 +556,9 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     final = listaCache;
   }
   // Se IA reformatou resposta de criação: usar formato clean direto
-  const isCriacaoCorreta = !criacaoCache || final.includes('criada*') || final.includes('criado*') || final.includes('✅') && final.includes('*');
-  if (criacaoCache && !isCriacaoCorreta) {
+  // Usar criacaoCache apenas se a IA não gerou resposta própria sobre criação
+  const finalTemCriacao = final.includes('criada') || final.includes('criado') || final.includes('anotado') || final.includes('Ideia') || final.includes('Lembrete') || final.includes('Nota');
+  if (criacaoCache && !finalTemCriacao) {
     final = criacaoCache;
   }
 
