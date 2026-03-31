@@ -492,6 +492,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'SEGURANÇA: O grupo de uma tarefa é SEMPRE o grupo de origem da mensagem. NUNCA use grupo diferente.',
     'IDs fixos: cada tarefa tem #ID (ex: #42). Aceite "#42" e "42" como identificadores.',
     'Ao arquivar/concluir por nome: remova palavras genéricas como "tarefa","nota","ideia" do identificador. Ex: "apagar tarefa cortar cabelo"→identificador:"cortar cabelo".',
+    'observacao: OMITA o campo se não houver observação real. NUNCA envie "—", "-", "n/a" ou campos vazios como observação.',
     '',
     'REGRAS:',
     '- LISTAR (tarefas/lista): chame buscar_tarefas e retorne SEU RESULTADO EXATO, sem alterar nada. NUNCA resuma, reformate ou reescreva a lista.',
@@ -596,10 +597,12 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           const novoIdNum = criado.id || '';
           const emoji = TIPO_EMOJI[tipoSalvo] || '✅';
           const prazo = inp.data ? '\n📅 Prazo: ' + fmtData(inp.data + (inp.hora ? 'T' + inp.hora + ':00' : '')) : '';
-          const obs = inp.observacao ? '\n💬 Obs: ' + inp.observacao : '';
+          const obsVal = (inp.observacao||'').trim();
+          const obsInvalida = !obsVal || /^[-—–]+$/.test(obsVal) || ['n/a','nenhuma','nenhum','none','null','-'].includes(obsVal.toLowerCase());
+          const obs = obsInvalida ? '' : '\n💬 Obs: ' + obsVal;
           const prio = inp.prioridade && inp.prioridade !== 'Normal' ? '\n⚡ Prioridade: ' + inp.prioridade : '';
-          const idLabel = novoIdNum ? '\n🔢 ID: #'+novoIdNum : '';
           const respLabel = (inp.responsavel && inp.responsavel !== remetente) ? '\n👤 Responsável: '+inp.responsavel : '';
+          const idLabel = novoIdNum ? ' *(#'+novoIdNum+')*' : '';
           res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prio+prazo+respLabel+obs;
           criacaoCache = res; // guardar para usar se IA reformatar
           cache = null; listaCache = null;
