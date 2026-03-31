@@ -425,7 +425,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     '  (máx 3, as mais urgentes/próximas)',
     '  [emoji] frase motivacional curta',
     '',
-    '- CRIAR: use EXATAMENTE este formato:',
+    '- CRIAR: mostre APENAS a tarefa criada no formato abaixo. NÃO liste outras tarefas. NÃO busque a lista.',
     '  ✅ Tarefa criada',
     '  *[título da tarefa]*',
     '  ⚡ Prioridade: [Normal/Urgente/Muito Urgente]',
@@ -528,11 +528,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     messages.push({ role:'user', content:results });
   }
 
-  // Buscar lista final após criar tarefas
-  if (final.includes('criada') && cache===null) {
-    cache = await buscarTarefas(grupo);
-    final = final+'\n\n'+formatarLista(cache);
-  }
+  // NÃO buscar lista após criar — apenas confirmar a criação
 
   // Se a IA reformatou lista ou resumo, usar o texto direto da ferramenta
   // Se a IA reformatou: usar resultado direto da ferramenta
