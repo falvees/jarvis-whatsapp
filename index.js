@@ -454,7 +454,7 @@ const TOOLS = [
   }
 ];
 
-// ─── Agente JARVIS ─────────────────────────────────────────────────────────────
+// ─── Agente Felps IA ──────────────────────────────────────────────────────────
 async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
   const hoje = new Date().toISOString().slice(0,10);
   const system = [
