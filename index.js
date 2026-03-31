@@ -150,6 +150,75 @@ function formatarLista(tarefas) {
   });
   return txt;
 }
+function formatarResumo(tarefas, grupoNome) {
+  if (!tarefas || !tarefas.length) return '✅ Nenhuma tarefa pendente! Tudo limpo 🎯';
+
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  let abertas = 0, emAndamento = 0, urgentes = 0, aguardando = 0, atrasadas = 0;
+
+  tarefas.forEach(t => {
+    const st  = norm(t.properties?.Status?.status?.name || '');
+    const pr  = norm(t.properties?.Prioridade?.select?.name || '');
+    const dat = t.properties?.Data?.date?.start || '';
+
+    if (st.includes('andamento')) emAndamento++;
+    if (st.includes('aguard'))    aguardando++;
+    if (pr.includes('urgente'))   urgentes++;
+    if (dat) {
+      const d = new Date(dat + (dat.length === 10 ? 'T12:00:00' : ''));
+      d.setHours(0,0,0,0);
+      if (d < hoje) atrasadas++;
+    }
+    abertas++;
+  });
+
+  // Foco do dia — top 3 por prioridade e data
+  const pw = p => { const n=norm(p||''); return n.includes('muito')?0:n.includes('urgente')?1:2; };
+  const sorted = [...tarefas].sort((a, b) => {
+    const pd = pw(a.properties?.Prioridade?.select?.name) - pw(b.properties?.Prioridade?.select?.name);
+    if (pd !== 0) return pd;
+    const da = a.properties?.Data?.date?.start || 'z';
+    const db = b.properties?.Data?.date?.start || 'z';
+    return da.localeCompare(db);
+  });
+
+  const foco = sorted.slice(0, 3).map(t => {
+    const titulo = t.properties?.Tarefa?.title?.[0]?.text?.content || '-';
+    const dat    = t.properties?.Data?.date?.start || '';
+    const obs    = t.properties?.Observacao?.rich_text?.[0]?.text?.content || '';
+    const df     = fmtData(dat);
+    let linha = '• *' + titulo + '*';
+    if (df)  linha += ' (' + df + ')';
+    if (obs) linha += ' — ' + obs;
+    return linha;
+  }).join('\n');
+
+  const frases = [
+    'Bora fechar tudo! 💪',
+    'Foco total hoje! 🎯',
+    'Um de cada vez! 🚀',
+    'Você consegue! ⚡',
+    'Vamos nessa! 🔥'
+  ];
+  const frase = frases[Math.floor(Math.random() * frases.length)];
+
+  return [
+    '🌅 *Resumo — ' + (grupoNome || 'Particular') + '*',
+    '',
+    '📋 Abertas: ' + abertas,
+    '🔄 Em andamento: ' + emAndamento,
+    '⚠️ Urgentes: ' + urgentes,
+    '⏸ Aguardando: ' + aguardando,
+    '📅 Atrasadas: ' + atrasadas,
+    '',
+    '🔥 *Foco de hoje:*',
+    foco,
+    '',
+    frase
+  ].join('\n');
+}
+
+
 
 // ─── Áudio WhatsApp ────────────────────────────────────────────────────────────
 async function downloadAudio(url) {
@@ -291,6 +360,11 @@ const TOOLS = [
       },
       required: ['identificadores']
     }
+  },
+  {
+    name: 'resumo_tarefas',
+    description: 'Gera um resumo/status das tarefas. Use quando pedir: resumo, status, o que tem, o que tá rolando, agenda do dia.',
+    input_schema: { type: 'object', properties: {}, required: [] }
   },
   {
     name: 'atualizar_tarefa',
