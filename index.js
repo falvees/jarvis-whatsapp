@@ -804,6 +804,12 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     final = criacaoCache;
   }
 
+  // Extrair mensagem de ajuda se presente
+  if (final.includes('---AJUDA---')) {
+    const match = final.match(/---AJUDA---([\s\S]*?)---FIMAJUDA---/);
+    if (match) final = match[1].trim();
+  }
+
   // Corrigir ** → *
   return (final||'Pronto!').replace(/\*\*([^*]+)\*\*/g,'*$1*');
 }
