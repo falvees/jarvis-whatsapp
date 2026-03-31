@@ -22,8 +22,10 @@ const GRUPOS = {
   '120363329006221266@g.us': { grupo: 'Particular', nome: 'Agenda do dia' }
 };
 
-// Número do Felipe para @menção nas respostas
+// JIDs do Felipe para @menção (LID = formato interno do WhatsApp)
+const FELIPE_LID = '41098558865548@lid';
 const FELIPE_JID = '553491201226@s.whatsapp.net';
+const FELIPE_LID = '41098558865548@lid';
 
 const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
@@ -237,8 +239,8 @@ async function enviarMensagem(jid, texto, mencionar) {
     path = '/message/sendText/' + INSTANCE;
     bodyObj = {
       number: jid,
-      text: '🤖 ' + texto,
-      mentioned: [FELIPE_JID]  // formato correto Evolution API
+      text: '🤖 ' + texto + '\n@553491201226',
+      mentioned: [FELIPE_LID]  // LID = formato interno WhatsApp para notificação
     };
     console.log('[SEND] mencionando:', FELIPE_JID);
   } else {
