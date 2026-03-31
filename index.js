@@ -59,27 +59,31 @@ async function notionReq(path, method, body) {
   return JSON.parse(r.body);
 }
 
-async function buscarTarefas(grupoFiltro) {
-  // Retry em caso de resultado vazio (timing issue com Notion API)
+async function buscarTarefas(grupoFiltro, tipoFiltro) {
+  // tipoFiltro: 'Tarefa', 'Nota', 'Ideia', 'Lembrete' — filtra pelo campo Origem
   for (let tentativa = 0; tentativa < 3; tentativa++) {
+    const conditions = [
+      { property: 'Status', status: { does_not_equal: 'Done' } }
+    ];
+    if (grupoFiltro) {
+      conditions.push({ property: 'Grupo', select: { equals: grupoFiltro } });
+    }
     const queryBody = {
-      filter: { property: 'Status', status: { does_not_equal: 'Done' } },
+      filter: conditions.length === 1 ? conditions[0] : { and: conditions },
       sorts: [{ timestamp: 'created_time', direction: 'descending' }],
       page_size: 50
     };
-    // Filtrar por grupo se especificado
-    if (grupoFiltro) {
-      queryBody.filter = {
-        and: [
-          { property: 'Status', status: { does_not_equal: 'Done' } },
-          { property: 'Grupo', select: { equals: grupoFiltro } }
-        ]
-      };
-    }
     const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', queryBody);
-    const results = d.results || [];
+    let results = d.results || [];
+    // Filtrar por tipo localmente (tipo está no campo Origem como "WhatsApp | Tipo")
+    if (tipoFiltro && results.length > 0) {
+      results = results.filter(r => {
+        const origem = r.properties?.Origem?.rich_text?.[0]?.text?.content || '';
+        return origem.toLowerCase().includes(tipoFiltro.toLowerCase());
+      });
+    }
     if (results.length > 0 || tentativa === 2) return results;
-    await new Promise(res => setTimeout(res, 1000)); // aguardar Notion commitar
+    await new Promise(res => setTimeout(res, 1000));
   }
   return [];
 }
@@ -429,6 +433,17 @@ const TOOLS = [
     }
   },
   {
+    name: 'listar_por_tipo',
+    description: 'Lista itens filtrando por tipo. Use quando pedir: "mostrar notas", "ver ideias", "listar lembretes", "minhas anotações", "mostrar tarefas apenas".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', enum: ['Tarefa', 'Nota', 'Ideia', 'Lembrete'], description: 'Tipo de item a listar' }
+      },
+      required: ['tipo']
+    }
+  },
+  {
     name: 'buscar_por_conteudo',
     description: 'Busca tarefas pelo conteúdo do título. Use quando pedir "acha tarefa sobre X", "tem algo sobre Y", "encontra X".',
     input_schema: {
@@ -471,6 +486,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Se múltiplos itens a criar, chame criar_tarefa UMA VEZ POR ITEM.',
     'Chame buscar_tarefas SEMPRE antes de listar, concluir ou atualizar.',
     'Para buscar por conteúdo: buscar_por_conteudo. Para apagar/arquivar: arquivar_tarefa.',
+    'Para listar por tipo (notas/ideias/lembretes/tarefas): use listar_por_tipo. Ex: "mostrar notas"→listar_por_tipo(tipo:Nota).',
     'SEGURANÇA: O grupo de uma tarefa é SEMPRE o grupo de origem da mensagem. NUNCA use grupo diferente.',
     'IDs fixos: cada tarefa tem #ID (ex: #42). Aceite "#42" e "42" como identificadores.',
     '',
@@ -621,6 +637,29 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
             res = '🗑️ *' + (idArq ? '#'+idArq+' ' : '') + titulo + '* arquivada!';
             cache = null; listaCache = null; criacaoCache = null;
           }
+
+        } else if (blk.name === 'listar_por_tipo') {
+          const tipo = blk.input.tipo || 'Tarefa';
+          const resultados = await buscarTarefas(grupo, tipo);
+          if (!resultados.length) {
+            res = '📭 Nenhuma ' + tipo.toLowerCase() + ' encontrada em ' + grupoNome + '.';
+          } else {
+            const emojiTipo = TIPO_EMOJI[tipo] || '📋';
+            let txt = emojiTipo + ' *' + tipo + 's · ' + resultados.length + ' encontrada(s)*\n';
+            resultados.forEach((t, i) => {
+              const titulo = t.properties?.Tarefa?.title?.[0]?.text?.content || '-';
+              const id = t.properties?.ID?.number;
+              const dat = t.properties?.Data?.date?.start || '';
+              const obs = t.properties?.Observacao?.rich_text?.[0]?.text?.content || '';
+              const df = dat ? fmtData(dat) : '';
+              txt += '\n' + (id ? '#'+id+' ' : '') + '*' + titulo + '*';
+              if (df) txt += '\n📅 ' + df;
+              if (obs) txt += '\n💬 _' + obs + '_';
+              txt += '\n';
+            });
+            res = txt.trim();
+          }
+          listaCache = res;
 
         } else if (blk.name === 'buscar_por_conteudo') {
           const todas = await buscarTarefas(null); // busca em todos os grupos
