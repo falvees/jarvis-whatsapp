@@ -229,10 +229,12 @@ async function transcreverAudio(buf) {
 // ─── Enviar WhatsApp ───────────────────────────────────────────────────────────
 async function enviarMensagem(jid, texto, mencionar) {
   const evoUrl = new URL(EVOLUTION_URL);
-  // Adicionar @menção se for grupo e tiver número configurado
-  const textoFinal = mencionar && FELIPE_JID ? texto + '\n@' + FELIPE_JID.replace('@s.whatsapp.net','') : texto;
-  const bodyObj = { number: jid, text: '🤖 ' + textoFinal };
-  if (mencionar && FELIPE_JID) bodyObj.mentions = [FELIPE_JID];
+  // Em grupos, usar @all para notificar todos os participantes
+  const isGroup = jid.endsWith('@g.us');
+  const bodyObj = { number: jid, text: '🤖 ' + texto };
+  if (mencionar && isGroup) {
+    bodyObj.mentionsEveryOne = true; // Evolution API: menciona @all
+  }
   const body = JSON.stringify(bodyObj);
   await httpReq({
     protocol: evoUrl.protocol, hostname: evoUrl.hostname,
