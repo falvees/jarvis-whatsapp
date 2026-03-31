@@ -583,24 +583,23 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           }
 
         } else if (blk.name === 'arquivar_tarefa') {
-          // Sempre faz fresh fetch para não depender de cache de outras operações
+          // Fresh fetch para não depender de cache de outras operações
           const cacheArq = await buscarTarefas(grupo);
           const nArq = parseInt((blk.input.identificador||'').replace(/^#/,'').trim());
-          // Buscar por ID (#5) ou número na lista ou nome
           let tArq = null;
           if (!isNaN(nArq)) {
-            // Tentar como ID do sistema primeiro
-            tArq = cache.find(x => x.properties?.ID?.number === nArq);
-            // Se não achou, usar como posição na lista
-            if (!tArq && nArq > 0 && nArq <= cache.length) tArq = cache[nArq-1];
+            tArq = cacheArq.find(t => t.properties?.ID?.number === nArq);
+            if (!tArq && nArq > 0 && nArq <= cacheArq.length) tArq = cacheArq[nArq-1];
           } else {
-            tArq = cache.find(x => norm(x.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(blk.input.identificador)));
+            const termo = (blk.input.identificador||'').replace(/^#/,'').trim();
+            tArq = cacheArq.find(x => norm(x.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(termo)));
           }
           if (!tArq) { res = '❌ Tarefa não encontrada.'; }
           else {
             await arquivarTarefa(tArq.id);
             const titulo = tArq.properties?.Tarefa?.title?.[0]?.text?.content||'tarefa';
-            res = '🗑️ *' + titulo + '* arquivada!';
+            const idArq = tArq.properties?.ID?.number;
+            res = '🗑️ *' + (idArq ? '#'+idArq+' ' : '') + titulo + '* arquivada!';
             cache = null; listaCache = null; criacaoCache = null;
           }
 
