@@ -458,7 +458,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
   ].filter(Boolean).join('\n');
 
   const messages = [{ role: 'user', content: texto||'(mensagem)' }];
-  let cache = null, listaCache = null, final = '';
+  let cache = null, listaCache = null, criacaoCache = null, final = '';
 
   for (let iter = 0; iter < 8; iter++) {
     const resp = await client.messages.create({ model:'claude-haiku-4-5-20251001', max_tokens:1024, system, tools:TOOLS, messages });
@@ -495,6 +495,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           const obs = inp.observacao ? '\n💬 Obs: ' + inp.observacao : '';
           const prio = inp.prioridade && inp.prioridade !== 'Normal' ? '\n⚡ Prioridade: ' + inp.prioridade : '';
           res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+prio+prazo+obs;
+          criacaoCache = res; // guardar para usar se IA reformatar
           cache = null; listaCache = null;
 
         } else if (blk.name === 'concluir_tarefas') {
@@ -547,10 +548,15 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
   }
 
   // Se a IA reformatou lista ou resumo, usar o texto direto da ferramenta
-  // Se a IA reformatou: usar lista/resumo direto da ferramenta
+  // Se a IA reformatou: usar resultado direto da ferramenta
   const isListaCorreta = final.includes('📋 *Tarefas ·') || final.includes('🌅 *Resumo') || final.includes('✅ Nenhuma tarefa pendente');
   if (listaCache && !isListaCorreta) {
     final = listaCache;
+  }
+  // Se IA reformatou resposta de criação: usar formato clean direto
+  const isCriacaoCorreta = !criacaoCache || final.includes('criada*') || final.includes('criado*') || final.includes('✅') && final.includes('*');
+  if (criacaoCache && !isCriacaoCorreta) {
+    final = criacaoCache;
   }
 
   // Corrigir ** → *
