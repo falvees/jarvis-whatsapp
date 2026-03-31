@@ -603,7 +603,8 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           if (inp_b.prioridade) partes.push(inp_b.prioridade.toLowerCase()+'s');
           const tituloFiltro = partes.length ? partes.join(' ') : null;
           res = formatarLista(filtrado, tituloFiltro);
-          listaCache = res; // garantir fallback se IA reformatar
+          // Acumular se IA chamar buscar_tarefas múltiplas vezes (ex: ideias + tarefas)
+          listaCache = listaCache ? listaCache + '\n\n' + res : res;
 
         } else if (blk.name === 'resumo_tarefas') {
           cache = await buscarTarefas(grupo);
