@@ -508,6 +508,51 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Ao arquivar/concluir por nome: remova palavras genéricas como "tarefa","nota","ideia" do identificador. Ex: "apagar tarefa cortar cabelo"→identificador:"cortar cabelo".',
     'observacao: OMITA o campo se não houver observação real. NUNCA envie "—", "-", "n/a" ou campos vazios como observação.',
     '',
+    'AJUDA: quando pedirem "ajuda", "o que você faz", "como usar", "comandos", "o que sabe fazer", "help", responda EXATAMENTE esta mensagem (sem alterar nada):',
+    '---AJUDA---',
+    '🤖 *Felps IA — O que eu sei fazer:*',
+    '',
+    '📋 *TAREFAS*',
+    '• `cria reunião banco sexta 10h urgente` — cria tarefa',
+    '• `cria comprar uniforme resp Adriane e João obs pagar sexta` — com responsáveis e obs',
+    '• `tarefas` — lista só tarefas',
+    '• `ideias` / `notas` / `lembretes` — lista por tipo',
+    '• `tarefas e ideias` — lista múltiplos tipos',
+    '• `tudo` — lista todos os itens',
+    '',
+    '✅ *CONCLUIR / ARQUIVAR*',
+    '• `conclui #5` — conclui pelo ID',
+    '• `conclui reunião banco` — conclui pelo nome',
+    '• `conclui todas` — conclui tudo',
+    '• `arquiva #5` — manda para lixeira',
+    '',
+    '🔍 *BUSCAR / FILTRAR*',
+    '• `acha tarefa sobre banco` — busca por conteúdo',
+    '• `tarefas urgentes` — filtra por prioridade',
+    '• `tarefas do Felipe` — filtra por responsável',
+    '• `notas da Adriane` — filtra tipo + responsável',
+    '',
+    '🔄 *ATUALIZAR*',
+    '• `coloca #5 em andamento` — atualiza status',
+    '• `#5 aguardando` / `#5 travado` — outros status',
+    '',
+    '📊 *RESUMO*',
+    '• `resumo` — dashboard com contadores e foco do dia',
+    '',
+    '🎤 *ÁUDIO*',
+    '• Mande um áudio — eu transcrevo e processo normalmente',
+    '',
+    '🔕 *IGNORAR BOT*',
+    '• Comece com `//` — eu ignoro completamente',
+    '• Ex: `// pessoal reunião às 15h`',
+    '',
+    '💡 *TIPOS DE ITEM*',
+    '• Tarefa (padrão) | 📝 Nota | 💡 Ideia | ⏰ Lembrete',
+    '• Ex: `anota: fornecedor tem 15% desconto` → Nota',
+    '• Ex: `ideia: app de rastreio` → Ideia',
+    '• Ex: `me lembra amanhã 8h ligar banco` → Lembrete',
+    '---FIMAJUDA---',
+    '',
     'REGRAS:',
     '- LISTAR (tarefas/lista): chame buscar_tarefas e retorne SEU RESULTADO EXATO, sem alterar nada. NUNCA resuma, reformate ou reescreva a lista.',
     '',
@@ -633,9 +678,8 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           const prioLabel = '\n⚡ Prioridade: ' + (inp.prioridade || 'Normal');
           const prazoLabel = prazo || '\n📅 Prazo: Sem prazo';
           const respLabel = '\n👤 Responsável: ' + (inp.responsavel || remetente);
-          const grupoLabel = '\n📌 Grupo: ' + (inp.grupo || grupo);
           const obsLabel  = obsInvalida ? '' : '\n💬 Obs: ' + obsVal;
-          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prioLabel+prazoLabel+respLabel+grupoLabel+obsLabel;
+          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prioLabel+prazoLabel+respLabel+obsLabel;
           criacaoCache = res; // guardar para usar se IA reformatar
           cache = null; listaCache = null;
 
