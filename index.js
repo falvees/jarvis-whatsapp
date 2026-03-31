@@ -357,17 +357,18 @@ const TOOLS = [
   },
   {
     name: 'criar_tarefa',
-    description: 'Cria uma nova tarefa. Se a mensagem mencionar MÚLTIPLOS itens, chame UMA VEZ POR ITEM.',
+    description: 'Cria novo item. Se múltiplos itens, chame UMA VEZ POR ITEM.',
     input_schema: {
       type: 'object',
       properties: {
-        titulo:      { type: 'string', description: 'Título da tarefa' },
-        responsavel: { type: 'string', description: 'Nome do responsável (padrão: remetente da mensagem)' },
-        data:        { type: 'string', description: 'Data no formato YYYY-MM-DD' },
-        hora:        { type: 'string', description: 'Hora no formato HH:MM' },
+        titulo:      { type: 'string', description: 'Título do item' },
+        tipo:        { type: 'string', enum: ['Tarefa','Nota','Ideia','Lembrete'], description: 'Tipo (padrão: Tarefa). Nota=anotação, Ideia=criativa, Lembrete=com data' },
+        responsavel: { type: 'string', description: 'Nome do responsável' },
+        data:        { type: 'string', description: 'YYYY-MM-DD' },
+        hora:        { type: 'string', description: 'HH:MM' },
         prioridade:  { type: 'string', enum: ['Normal','Urgente','Muito Urgente'] },
-        observacao:  { type: 'string', description: 'Observação ou detalhe adicional sobre a tarefa' },
-        grupo:       { type: 'string', description: 'Grupo/empresa: Particular, Natbox, Digiverso, Felps' }
+        observacao:  { type: 'string', description: 'Observação adicional' },
+        grupo:       { type: 'string', description: 'Particular, Natbox, Digiverso, Felps' }
       },
       required: ['titulo']
     }
@@ -617,4 +618,28 @@ app.post('/deploy-hook', async (req, res) => {
 
 app.get('/health', (_, res) => res.json({ status:'ok', service:'JARVIS v2.1', uptime:process.uptime() }));
 
-app.listen(PORT, () => console.log('🤖 JARVIS online | porta '+PORT));
+// ─── Resumo automático às 9h ─────────────────────────────────────────────
+function agendarResumo() {
+  const brasilia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const prox9h = new Date(brasilia);
+  prox9h.setHours(9, 0, 0, 0);
+  if (brasilia >= prox9h) prox9h.setDate(prox9h.getDate() + 1);
+  const msAte9h = prox9h - brasilia;
+  console.log('[CRON] Próximo resumo em ' + Math.round(msAte9h/60000) + 'min (' + prox9h.toLocaleString('pt-BR') + ')');
+  setTimeout(async () => {
+    try {
+      console.log('[CRON] Enviando resumo automático...');
+      for (const [jid, cfg] of Object.entries(GRUPOS)) {
+        const grupoKey = cfg.grupo;
+        const tarefas = await buscarTarefas(grupoKey);
+        const msg = formatarResumo(tarefas, cfg.nome);
+        await enviarMensagem(jid, msg);
+        console.log('[CRON] Resumo enviado para', cfg.nome);
+      }
+    } catch(e) { console.error('[CRON ERROR]', e.message); }
+    agendarResumo();
+  }, msAte9h);
+}
+agendarResumo();
+
+app.listen(PORT, () => console.log('🤖 JARVIS v2 online | porta '+PORT));
