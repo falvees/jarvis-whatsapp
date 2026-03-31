@@ -395,7 +395,7 @@ const TOOLS = [
         hora:        { type: 'string', description: 'HH:MM' },
         prioridade:  { type: 'string', enum: ['Normal','Urgente','Muito Urgente'] },
         observacao:  { type: 'string', description: 'Observação adicional' },
-        grupo:       { type: 'string', description: 'Particular, Natbox, Digiverso, Felps' }
+        // grupo removido do tool — sempre determinado pelo grupo de origem da mensagem
       },
       required: ['titulo']
     }
@@ -471,6 +471,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Se múltiplos itens a criar, chame criar_tarefa UMA VEZ POR ITEM.',
     'Chame buscar_tarefas SEMPRE antes de listar, concluir ou atualizar.',
     'Para buscar por conteúdo: buscar_por_conteudo. Para apagar/arquivar: arquivar_tarefa.',
+    'SEGURANÇA: O grupo de uma tarefa é SEMPRE o grupo de origem da mensagem. NUNCA use grupo diferente.',
     'IDs fixos: cada tarefa tem #ID (ex: #42). Aceite "#42" e "42" como identificadores.',
     '',
     'REGRAS:',
@@ -555,7 +556,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           const criado = await criarTarefa({ titulo:inp.titulo, tipo:inp.tipo||'Tarefa',
             responsavel:inp.responsavel||remetente,
             data:inp.data, hora:inp.hora, prioridade:inp.prioridade||'Normal',
-            observacao:inp.observacao, grupo:inp.grupo||grupo });
+            observacao:inp.observacao, grupo:grupo }); // grupo SEMPRE do grupo de origem, nunca do usuário
           const tipoSalvo = criado.tipo || criado; // compatibilidade
           const novoIdNum = criado.id || '';
           const emoji = TIPO_EMOJI[tipoSalvo] || '✅';
