@@ -514,6 +514,11 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     final = final+'\n\n'+formatarLista(cache);
   }
 
+  // Se a IA reformatou lista ou resumo, usar o texto direto da ferramenta
+  if (listaCache && !final.includes('📋') && !final.includes('🌅') && !final.includes('✅ Nenhuma')) {
+    final = listaCache;
+  }
+
   // Corrigir ** → *
   return (final||'Pronto!').replace(/\*\*([^*]+)\*\*/g,'*$1*');
 }
