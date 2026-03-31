@@ -421,7 +421,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Chame buscar_tarefas SEMPRE antes de listar, concluir ou atualizar.',
     '',
     'REGRAS:',
-    '- LISTAR (tarefas/lista): retorne EXATAMENTE o texto da ferramenta buscar_tarefas.',
+    '- LISTAR (tarefas/lista): chame buscar_tarefas e retorne SEU RESULTADO EXATO, sem alterar nada. NUNCA resuma, reformate ou reescreva a lista.',
     '',
     '- RESUMO (resumo/status/o que tem/o que tá rolando): use este formato:',
     '  🌅 Resumo — [Grupo]',
@@ -482,6 +482,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
         if (blk.name === 'buscar_tarefas') {
           cache = await buscarTarefas(grupo);
           res = formatarLista(cache);
+          listaCache = res; // garantir fallback se IA reformatar
 
         } else if (blk.name === 'criar_tarefa') {
           const inp = blk.input;
@@ -546,7 +547,9 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
   }
 
   // Se a IA reformatou lista ou resumo, usar o texto direto da ferramenta
-  if (listaCache && !final.includes('📋') && !final.includes('🌅') && !final.includes('✅ Nenhuma')) {
+  // Se a IA reformatou: usar lista/resumo direto da ferramenta
+  const isListaCorreta = final.includes('📋 *Tarefas ·') || final.includes('🌅 *Resumo') || final.includes('✅ Nenhuma tarefa pendente');
+  if (listaCache && !isListaCorreta) {
     final = listaCache;
   }
 
