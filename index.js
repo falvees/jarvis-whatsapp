@@ -79,7 +79,7 @@ async function buscarTarefas(grupoFiltro) {
     const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', queryBody);
     const results = d.results || [];
     if (results.length > 0 || tentativa === 2) return results;
-    await new Promise(res => setTimeout(res, 500));
+    await new Promise(res => setTimeout(res, 1000)); // aguardar Notion commitar
   }
   return [];
 }
@@ -468,6 +468,10 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
       try {
         if (blk.name === 'buscar_tarefas') {
           cache = await buscarTarefas(grupo);
+          if (!cache.length) {
+            await new Promise(r => setTimeout(r, 2000));
+            cache = await buscarTarefas(grupo);
+          }
           res = formatarLista(cache);
           listaCache = res; // garantir fallback se IA reformatar
 
