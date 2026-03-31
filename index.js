@@ -87,10 +87,22 @@ async function buscarTarefas(grupoFiltro) {
 // Emojis por tipo de item
 const TIPO_EMOJI = { Tarefa: '📋', Nota: '📝', Ideia: '💡', Lembrete: '⏰' };
 
+// Pegar próximo ID sequencial
+async function proximoId() {
+  const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', {
+    sorts: [{ property: 'ID', direction: 'descending' }],
+    page_size: 1
+  });
+  const ultimo = d.results?.[0]?.properties?.ID?.number || 0;
+  return ultimo + 1;
+}
+
 async function criarTarefa({ titulo, tipo, responsavel, data, hora, prioridade, observacao, grupo }) {
   const tipoFinal = tipo || 'Tarefa';
+  const novoId = await proximoId();
   const props = {
     Tarefa:      { title: [{ text: { content: titulo } }] },
+    ID:          { number: novoId },
     Responsavel: { rich_text: [{ text: { content: responsavel || 'Felipe' } }] },
     Grupo:       { select: { name: grupo || 'Particular' } },
     Prioridade:  { select: { name: prioridade || 'Normal' } },
@@ -101,7 +113,13 @@ async function criarTarefa({ titulo, tipo, responsavel, data, hora, prioridade, 
   // Tipo armazenado na Origem para diferenciar
   props.Origem = { rich_text: [{ text: { content: 'WhatsApp | ' + tipoFinal } }] };
   await notionReq('/v1/pages', 'POST', { parent: { database_id: NOTION_DB }, properties: props });
-  return tipoFinal;
+  return { tipo: tipoFinal, id: novoId };
+}
+
+async function arquivarTarefa(pageId) {
+  await notionReq('/v1/pages/' + pageId, 'PATCH', {
+    properties: { Status: { status: { name: 'Arquivada' } } }
+  });
 }
 
 async function concluirTarefa(pageId) {
@@ -163,7 +181,9 @@ function formatarLista(tarefas) {
     const st     = stsInfo(t.properties?.Status?.status?.name||'');
     const obs    = t.properties?.Observacao?.rich_text?.[0]?.text?.content||'';
     const df     = fmtData(dat);
-    txt += '\n'+prio.c+' *#'+(i+1)+' '+titulo+'*\n';
+    const idSistema = t.properties?.ID?.number;
+    const numExib = idSistema ? '#'+idSistema : '#'+(i+1);
+    txt += '\n'+prio.c+' *'+numExib+' '+titulo+'*\n';
     const pts = ['👤 '+resp];
     if (df)  pts.push('📅 '+df);
     if (grp) pts.push('📌 '+grp);
@@ -376,6 +396,28 @@ const TOOLS = [
     input_schema: { type: 'object', properties: {}, required: [] }
   },
   {
+    name: 'arquivar_tarefa',
+    description: 'Move tarefa para lixeira/arquiva. Use quando pedir "apaga", "remove", "arquiva", "lixeira", "delete".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        identificador: { type: 'string', description: 'Número (#5), ID ou nome da tarefa' }
+      },
+      required: ['identificador']
+    }
+  },
+  {
+    name: 'buscar_por_conteudo',
+    description: 'Busca tarefas pelo conteúdo do título. Use quando pedir "acha tarefa sobre X", "tem algo sobre Y", "encontra X".',
+    input_schema: {
+      type: 'object',
+      properties: {
+        termo: { type: 'string', description: 'Termo a buscar no título das tarefas' }
+      },
+      required: ['termo']
+    }
+  },
+  {
     name: 'atualizar_tarefa',
     description: 'Atualiza o status e/ou observação de uma tarefa existente.',
     input_schema: {
@@ -486,15 +528,18 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
 
         } else if (blk.name === 'criar_tarefa') {
           const inp = blk.input;
-          const tipoSalvo = await criarTarefa({ titulo:inp.titulo, tipo:inp.tipo||'Tarefa',
+          const criado = await criarTarefa({ titulo:inp.titulo, tipo:inp.tipo||'Tarefa',
             responsavel:inp.responsavel||remetente,
             data:inp.data, hora:inp.hora, prioridade:inp.prioridade||'Normal',
             observacao:inp.observacao, grupo:inp.grupo||grupo });
+          const tipoSalvo = criado.tipo || criado; // compatibilidade
+          const novoIdNum = criado.id || '';
           const emoji = TIPO_EMOJI[tipoSalvo] || '✅';
           const prazo = inp.data ? '\n📅 Prazo: ' + fmtData(inp.data + (inp.hora ? 'T' + inp.hora + ':00' : '')) : '';
           const obs = inp.observacao ? '\n💬 Obs: ' + inp.observacao : '';
           const prio = inp.prioridade && inp.prioridade !== 'Normal' ? '\n⚡ Prioridade: ' + inp.prioridade : '';
-          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+prio+prazo+obs;
+          const idLabel = novoIdNum ? '\n🔢 ID: #'+novoIdNum : '';
+          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prio+prazo+obs;
           criacaoCache = res; // guardar para usar se IA reformatar
           cache = null; listaCache = null;
 
@@ -506,9 +551,17 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           if (isAll) { found = [...cache]; }
           else {
             for (const id of ids) {
-              const n = parseInt(id);
-              if (!isNaN(n)&&n>0&&n<=cache.length) found.push(cache[n-1]);
-              else found.push(...cache.filter(t=>norm(t.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(id))));
+              const cleaned = id.replace(/^#/,'').trim();
+              const n = parseInt(cleaned);
+              if (!isNaN(n)) {
+                // Tentar por ID do sistema (#5) primeiro
+                const porId = cache.find(t => t.properties?.ID?.number === n);
+                if (porId) found.push(porId);
+                // Se não achou, usar posição na lista
+                else if (n>0&&n<=cache.length) found.push(cache[n-1]);
+              } else {
+                found.push(...cache.filter(t=>norm(t.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(id))));
+              }
             }
           }
           const seen = new Set(); found = found.filter(t=>{if(seen.has(t.id))return false;seen.add(t.id);return true;});
@@ -520,6 +573,43 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
                 : found.length===1 ? '✅ "'+tits[0]+'" concluída!'
                 : '✅ '+found.length+' concluídas:\n'+tits.map(t=>'  · '+t).join('\n');
             cache = null; listaCache = null; criacaoCache = null;
+          }
+
+        } else if (blk.name === 'arquivar_tarefa') {
+          if (!cache) cache = await buscarTarefas(grupo);
+          const nArq = parseInt(blk.input.identificador);
+          // Buscar por ID (#5) ou número na lista ou nome
+          let tArq = null;
+          if (!isNaN(nArq)) {
+            // Tentar como ID do sistema primeiro
+            tArq = cache.find(x => x.properties?.ID?.number === nArq);
+            // Se não achou, usar como posição na lista
+            if (!tArq && nArq > 0 && nArq <= cache.length) tArq = cache[nArq-1];
+          } else {
+            tArq = cache.find(x => norm(x.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(blk.input.identificador)));
+          }
+          if (!tArq) { res = '❌ Tarefa não encontrada.'; }
+          else {
+            await arquivarTarefa(tArq.id);
+            const titulo = tArq.properties?.Tarefa?.title?.[0]?.text?.content||'tarefa';
+            res = '🗑️ *' + titulo + '* arquivada!';
+            cache = null; listaCache = null; criacaoCache = null;
+          }
+
+        } else if (blk.name === 'buscar_por_conteudo') {
+          const todas = await buscarTarefas(null); // busca em todos os grupos
+          const termo = norm(blk.input.termo || '');
+          const found = todas.filter(t => norm(t.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(termo));
+          if (!found.length) {
+            res = '🔍 Nenhuma tarefa encontrada com "' + blk.input.termo + '"';
+          } else {
+            res = '🔍 *' + found.length + ' encontrada(s) com "' + blk.input.termo + '"*\n' +
+              found.map(t => {
+                const titulo = t.properties?.Tarefa?.title?.[0]?.text?.content||'-';
+                const g = t.properties?.Grupo?.select?.name||'';
+                const id = t.properties?.ID?.number;
+                return '  ' + (id?'#'+id+' ':' ') + titulo + ' ['+g+']';
+              }).join('\n');
           }
 
         } else if (blk.name === 'atualizar_tarefa') {
