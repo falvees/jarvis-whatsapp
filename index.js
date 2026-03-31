@@ -36,7 +36,7 @@ function httpReq(opts, body) {
     });
     req.setTimeout(25000, () => { req.destroy(); reject(new Error(opts.hostname + ' timeout')); });
     req.on('error', reject);
-    if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body));
+    if (body) req.write(Buffer.isBuffer(body) ? body : (typeof body === 'string' ? body : JSON.stringify(body)));
     req.end();
   });
 }
