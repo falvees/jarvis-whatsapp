@@ -448,6 +448,8 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Exemplos: "bora fechar tudo" = concluir todas, "mete aí reunião amanhã" = criar tarefa.',
     'Se múltiplos itens a criar, chame criar_tarefa UMA VEZ POR ITEM.',
     'Chame buscar_tarefas SEMPRE antes de listar, concluir ou atualizar.',
+    'Para buscar por conteúdo: buscar_por_conteudo. Para apagar/arquivar: arquivar_tarefa.',
+    'IDs fixos: cada tarefa tem #ID (ex: #42). Aceite "#42" e "42" como identificadores.',
     '',
     'REGRAS:',
     '- LISTAR (tarefas/lista): chame buscar_tarefas e retorne SEU RESULTADO EXATO, sem alterar nada. NUNCA resuma, reformate ou reescreva a lista.',
