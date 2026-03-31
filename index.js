@@ -119,14 +119,31 @@ async function proximoId() {
 
 async function criarTarefa({ titulo, tipo, responsavel, data, hora, prioridade, observacao, grupo }) {
   const tipoFinal = tipo || 'Tarefa';
-  // Anti-duplicação: se já está criando este título agora, aguardar e ignorar
+  // Anti-duplicação: verificar Set em memória E Notion
   const tituloKey = (grupo + '|' + titulo).toLowerCase().trim();
   if (_criandoTitulos.has(tituloKey)) {
-    console.log('[DEDUP] Ignorando duplicata:', titulo);
+    console.log('[DEDUP] Ignorando duplicata (set):', titulo);
     return { tipo: tipoFinal, id: null, duplicata: true };
   }
   _criandoTitulos.add(tituloKey);
-  setTimeout(() => _criandoTitulos.delete(tituloKey), 30000); // limpar após 30s
+  setTimeout(() => _criandoTitulos.delete(tituloKey), 60000); // limpar após 60s
+  
+  // Verificar no Notion se já existe tarefa igual aberta no mesmo grupo (nos últimos 30s)
+  try {
+    const check = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', {
+      filter: { and: [
+        { property: 'Status', status: { does_not_equal: 'Done' } },
+        { property: 'Grupo', select: { equals: grupo } },
+        { property: 'Tarefa', title: { equals: titulo } }
+      ]},
+      page_size: 1
+    });
+    if (check.results?.length > 0) {
+      console.log('[DEDUP] Já existe no Notion:', titulo);
+      _criandoTitulos.delete(tituloKey);
+      return { tipo: tipoFinal, id: null, duplicata: true };
+    }
+  } catch(e) { /* ignorar erro de check */ }
 
   const novoId = await proximoId();
   const props = {
@@ -797,10 +814,8 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
   if (listaCache) {
     final = listaCache;
   }
-  // Se IA reformatou resposta de criação: usar formato clean direto
-  // Usar criacaoCache apenas se a IA não gerou resposta própria sobre criação
-  const finalTemCriacao = final.includes('criada') || final.includes('criado') || final.includes('anotado') || final.includes('Ideia') || final.includes('Lembrete') || final.includes('Nota');
-  if (criacaoCache && !finalTemCriacao) {
+  // Sempre usar criacaoCache quando existe — garante formato consistente
+  if (criacaoCache) {
     final = criacaoCache;
   }
 
