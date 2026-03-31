@@ -19,7 +19,8 @@ const PORT          = process.env.PORT || 3000;
 
 // Grupos permitidos — adicione mais conforme necessário
 const GRUPOS = {
-  '120363329006221266@g.us': { grupo: 'Particular', nome: 'Agenda do dia' }
+  '120363329006221266@g.us': { grupo: 'Particular',  nome: 'Agenda do dia',  empresa: 'Pessoal' },
+  '120363426207796139@g.us': { grupo: 'Natbox',      nome: 'AGENDA - Natbox', empresa: 'Natbox'  }
 };
 
 // JIDs do Felipe para @menção (LID = formato interno do WhatsApp)
@@ -58,23 +59,36 @@ async function notionReq(path, method, body) {
   return JSON.parse(r.body);
 }
 
-async function buscarTarefas() {
+async function buscarTarefas(grupoFiltro) {
   // Retry em caso de resultado vazio (timing issue com Notion API)
   for (let tentativa = 0; tentativa < 3; tentativa++) {
-    const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', {
+    const queryBody = {
       filter: { property: 'Status', status: { does_not_equal: 'Done' } },
       sorts: [{ timestamp: 'created_time', direction: 'descending' }],
       page_size: 50
-    });
+    };
+    // Filtrar por grupo se especificado
+    if (grupoFiltro) {
+      queryBody.filter = {
+        and: [
+          { property: 'Status', status: { does_not_equal: 'Done' } },
+          { property: 'Grupo', select: { equals: grupoFiltro } }
+        ]
+      };
+    }
+    const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', queryBody);
     const results = d.results || [];
     if (results.length > 0 || tentativa === 2) return results;
-    // Se veio vazio, aguardar 500ms e tentar novamente
     await new Promise(res => setTimeout(res, 500));
   }
   return [];
 }
 
-async function criarTarefa({ titulo, responsavel, data, hora, prioridade, observacao, grupo }) {
+// Emojis por tipo de item
+const TIPO_EMOJI = { Tarefa: '📋', Nota: '📝', Ideia: '💡', Lembrete: '⏰' };
+
+async function criarTarefa({ titulo, tipo, responsavel, data, hora, prioridade, observacao, grupo }) {
+  const tipoFinal = tipo || 'Tarefa';
   const props = {
     Tarefa:      { title: [{ text: { content: titulo } }] },
     Responsavel: { rich_text: [{ text: { content: responsavel || 'Felipe' } }] },
@@ -84,7 +98,10 @@ async function criarTarefa({ titulo, responsavel, data, hora, prioridade, observ
   };
   if (data) props.Data = { date: { start: data + (hora ? 'T' + hora + ':00' : '') } };
   if (observacao) props.Observacao = { rich_text: [{ text: { content: observacao } }] };
+  // Tipo armazenado na Origem para diferenciar
+  props.Origem = { rich_text: [{ text: { content: 'WhatsApp | ' + tipoFinal } }] };
   await notionReq('/v1/pages', 'POST', { parent: { database_id: NOTION_DB }, properties: props });
+  return tipoFinal;
 }
 
 async function concluirTarefa(pageId) {
@@ -465,14 +482,19 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
 
         } else if (blk.name === 'criar_tarefa') {
           const inp = blk.input;
-          await criarTarefa({ titulo:inp.titulo, responsavel:inp.responsavel||remetente,
+          const tipoSalvo = await criarTarefa({ titulo:inp.titulo, tipo:inp.tipo||'Tarefa',
+            responsavel:inp.responsavel||remetente,
             data:inp.data, hora:inp.hora, prioridade:inp.prioridade||'Normal',
             observacao:inp.observacao, grupo:inp.grupo||grupo });
-          res = '✅ "'+inp.titulo+'" criada!';
+          const emoji = TIPO_EMOJI[tipoSalvo] || '✅';
+          const prazo = inp.data ? '\n📅 Prazo: ' + (inp.data === new Date().toISOString().slice(0,10) ? 'Hoje' : inp.data) + (inp.hora ? ' às ' + inp.hora + 'h' : '') : '';
+          const obs = inp.observacao ? '\n💬 Obs: ' + inp.observacao : '';
+          const prio = inp.prioridade && inp.prioridade !== 'Normal' ? '\n⚡ Prioridade: ' + inp.prioridade : '';
+          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+prio+prazo+obs;
           cache = null; listaCache = null;
 
         } else if (blk.name === 'concluir_tarefas') {
-          if (!cache) cache = await buscarTarefas();
+          if (!cache) cache = await buscarTarefas(grupo);
           const ids = blk.input.identificadores||[];
           const isAll = ids.some(x=>/^(todas?|tudo|all)$/i.test(x.trim()));
           let found = [];
@@ -496,7 +518,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           }
 
         } else if (blk.name === 'atualizar_tarefa') {
-          if (!cache) cache = await buscarTarefas();
+          if (!cache) cache = await buscarTarefas(grupo);
           const n = parseInt(blk.input.identificador);
           const t = !isNaN(n)&&n>0&&n<=cache.length ? cache[n-1]
             : cache.find(x=>norm(x.properties?.Tarefa?.title?.[0]?.text?.content||'').includes(norm(blk.input.identificador)));
@@ -516,7 +538,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
 
   // Buscar lista final após criar tarefas
   if (final.includes('criada') && cache===null) {
-    cache = await buscarTarefas();
+    cache = await buscarTarefas(grupo);
     final = final+'\n\n'+formatarLista(cache);
   }
 
