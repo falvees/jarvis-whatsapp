@@ -776,6 +776,13 @@ app.post('/webhook', async (req, res) => {
     let texto = msg.conversation || msg.extendedTextMessage?.text || msg.imageMessage?.caption || '';
     if (texto.startsWith('🤖')) return; // anti-loop
 
+    // Prefixo de silêncio: # ou // no início = bot ignora completamente
+    const PREFIXOS_IGNORAR = ['#', '//'];
+    if (PREFIXOS_IGNORAR.some(p => texto.trimStart().startsWith(p))) {
+      console.log('[IGNORE] Mensagem ignorada por prefixo:', texto.slice(0,40));
+      return;
+    }
+
     const isAudio = !!msg.audioMessage;
     if (!texto && !isAudio) return;
 
