@@ -402,6 +402,25 @@ app.post('/webhook', async (req, res) => {
 });
 
 // ─── Health ────────────────────────────────────────────────────────────────────
+
+// ─── Deploy Hook ──────────────────────────────────────────────────────────────
+app.post('/deploy-hook', async (req, res) => {
+  res.sendStatus(200);
+  try {
+    const payload = req.body;
+    const branch = (payload && payload.ref) ? payload.ref.replace('refs/heads/', '') : '';
+    if (branch !== 'master') return;
+    console.log('[DEPLOY] Push no master detectado, triggering redeploy...');
+    const https = require('https');
+    const body = JSON.stringify({ query: 'mutation { githubRepoUpdate(input: { serviceId: "ee0b45cb-1dda-4a88-965a-657ceefa569c", projectId: "a9b85a94-37cc-486b-97b2-c762b70b8749", environmentId: "35d833e0-4128-43ae-9f08-302932bf9a6a" }) }' });
+    const r = https.request({
+      hostname: 'backboard.railway.com', path: '/graphql/v2', method: 'POST',
+      headers: { 'Authorization': 'Bearer f05476dd-6791-42b6-b280-ee9acd845507', 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    }, (rs) => { console.log('[DEPLOY] Railway:', rs.statusCode); });
+    r.write(body); r.end();
+  } catch(e) { console.error('[DEPLOY ERROR]', e.message); }
+});
+
 app.get('/health', (_, res) => res.json({ status:'ok', service:'JARVIS v2.1', uptime:process.uptime() }));
 
 app.listen(PORT, () => console.log('🤖 JARVIS online | porta '+PORT));
