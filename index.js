@@ -117,8 +117,12 @@ async function criarTarefa({ titulo, tipo, responsavel, data, hora, prioridade, 
 }
 
 async function arquivarTarefa(pageId) {
+  // Usa Done mas marca a Origem como "Lixeira" para distinguir de concluído
   await notionReq('/v1/pages/' + pageId, 'PATCH', {
-    properties: { Status: { status: { name: 'Arquivada' } } }
+    properties: {
+      Status: { status: { name: 'Done' } },
+      Origem: { rich_text: [{ text: { content: 'Lixeira' } }] }
+    }
   });
 }
 
