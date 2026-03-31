@@ -193,11 +193,12 @@ function fmtData(d) {
   return df;
 }
 
-function formatarLista(tarefas) {
-  if (!tarefas||!tarefas.length) return '✅ Nenhuma tarefa pendente!';
+function formatarLista(tarefas, tituloCustom) {
+  if (!tarefas||!tarefas.length) return tituloCustom ? '📭 Nenhuma '+tituloCustom+' encontrada!' : '✅ Nenhuma tarefa pendente!';
   const pw = p => { const n=norm(p||''); return n.includes('muito')?0:n.includes('urgente')?1:2; };
   const sorted = [...tarefas].sort((a,b) => pw(a.properties?.Prioridade?.select?.name)-pw(b.properties?.Prioridade?.select?.name));
-  let txt = '📋 *Tarefas · '+sorted.length+' abertas*\n';
+  const titulo = tituloCustom ? tituloCustom.charAt(0).toUpperCase()+tituloCustom.slice(1) : 'Tarefas';
+  let txt = '📋 *'+titulo+' · '+sorted.length+' aberta(s)*\n';
   sorted.forEach((t,i) => {
     const titulo = t.properties?.Tarefa?.title?.[0]?.text?.content||'-';
     const resp   = t.properties?.Responsavel?.rich_text?.[0]?.text?.content||'-';
@@ -383,8 +384,16 @@ async function enviarMensagem(jid, texto) {
 const TOOLS = [
   {
     name: 'buscar_tarefas',
-    description: 'Busca todas as tarefas pendentes. Chame SEMPRE antes de listar, concluir ou atualizar.',
-    input_schema: { type: 'object', properties: {}, required: [] }
+    description: 'Busca itens pendentes com filtros opcionais. Use para: listar, mostrar notas/ideias/lembretes/tarefas, ver por responsável, ver urgentes, etc. A IA monta os filtros dinamicamente.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo:        { type: 'string', enum: ['Tarefa','Nota','Ideia','Lembrete'], description: 'Filtrar por tipo. Ex: "mostrar notas"→Nota, "ver ideias"→Ideia' },
+        responsavel: { type: 'string', description: 'Filtrar por responsável. Ex: "tarefas do Felipe"→Felipe' },
+        prioridade:  { type: 'string', enum: ['Normal','Urgente','Muito Urgente'], description: 'Filtrar por prioridade. Ex: "urgentes"→Urgente' }
+      },
+      required: []
+    }
   },
   {
     name: 'criar_tarefa',
@@ -433,17 +442,6 @@ const TOOLS = [
     }
   },
   {
-    name: 'listar_por_tipo',
-    description: 'Lista itens filtrando por tipo. Use quando pedir: "mostrar notas", "ver ideias", "listar lembretes", "minhas anotações", "mostrar tarefas apenas".',
-    input_schema: {
-      type: 'object',
-      properties: {
-        tipo: { type: 'string', enum: ['Tarefa', 'Nota', 'Ideia', 'Lembrete'], description: 'Tipo de item a listar' }
-      },
-      required: ['tipo']
-    }
-  },
-  {
     name: 'buscar_por_conteudo',
     description: 'Busca tarefas pelo conteúdo do título. Use quando pedir "acha tarefa sobre X", "tem algo sobre Y", "encontra X".',
     input_schema: {
@@ -484,7 +482,9 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Exemplos tipo: "anota aí..."→Nota, "tive uma ideia..."→Ideia, "me lembra amanhã..."→Lembrete.',
     'Exemplos: "bora fechar tudo" = concluir todas, "mete aí reunião amanhã" = criar tarefa.',
     'Se múltiplos itens a criar, chame criar_tarefa UMA VEZ POR ITEM.',
-    'Chame buscar_tarefas SEMPRE antes de listar, concluir ou atualizar.',
+    'Chame buscar_tarefas SEMPRE antes de listar/concluir/atualizar.',
+    'buscar_tarefas aceita filtros opcionais: tipo (Tarefa/Nota/Ideia/Lembrete), responsavel, prioridade.',
+    'Ex: "mostrar notas"→tipo:Nota | "tarefas urgentes do Felipe"→tipo:Tarefa+prioridade:Urgente+responsavel:Felipe | "ver ideias"→tipo:Ideia',
     'Para buscar por conteúdo: buscar_por_conteudo. Para apagar/arquivar: arquivar_tarefa.',
     'Para listar por tipo (notas/ideias/lembretes/tarefas): use listar_por_tipo. Ex: "mostrar notas"→listar_por_tipo(tipo:Nota).',
     'SEGURANÇA: O grupo de uma tarefa é SEMPRE o grupo de origem da mensagem. NUNCA use grupo diferente.',
@@ -550,12 +550,28 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
       let res = '';
       try {
         if (blk.name === 'buscar_tarefas') {
-          cache = await buscarTarefas(grupo);
+          const inp_b = blk.input || {};
+          cache = await buscarTarefas(grupo, inp_b.tipo);
           if (!cache.length) {
             await new Promise(r => setTimeout(r, 2000));
-            cache = await buscarTarefas(grupo);
+            cache = await buscarTarefas(grupo, inp_b.tipo);
           }
-          res = formatarLista(cache);
+          // Aplicar filtros adicionais localmente
+          let filtrado = cache;
+          if (inp_b.responsavel) {
+            const rNorm = norm(inp_b.responsavel);
+            filtrado = filtrado.filter(t => norm(t.properties?.Responsavel?.rich_text?.[0]?.text?.content||'').includes(rNorm));
+          }
+          if (inp_b.prioridade) {
+            filtrado = filtrado.filter(t => norm(t.properties?.Prioridade?.select?.name||'').includes(norm(inp_b.prioridade)));
+          }
+          // Título do filtro para o cabeçalho
+          const partes = [];
+          if (inp_b.tipo) partes.push(inp_b.tipo+'s');
+          if (inp_b.responsavel) partes.push('do '+inp_b.responsavel);
+          if (inp_b.prioridade) partes.push(inp_b.prioridade.toLowerCase()+'s');
+          const tituloFiltro = partes.length ? partes.join(' ') : null;
+          res = formatarLista(filtrado, tituloFiltro);
           listaCache = res; // garantir fallback se IA reformatar
 
         } else if (blk.name === 'resumo_tarefas') {
@@ -637,29 +653,6 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
             res = '🗑️ *' + (idArq ? '#'+idArq+' ' : '') + titulo + '* arquivada!';
             cache = null; listaCache = null; criacaoCache = null;
           }
-
-        } else if (blk.name === 'listar_por_tipo') {
-          const tipo = blk.input.tipo || 'Tarefa';
-          const resultados = await buscarTarefas(grupo, tipo);
-          if (!resultados.length) {
-            res = '📭 Nenhuma ' + tipo.toLowerCase() + ' encontrada em ' + grupoNome + '.';
-          } else {
-            const emojiTipo = TIPO_EMOJI[tipo] || '📋';
-            let txt = emojiTipo + ' *' + tipo + 's · ' + resultados.length + ' encontrada(s)*\n';
-            resultados.forEach((t, i) => {
-              const titulo = t.properties?.Tarefa?.title?.[0]?.text?.content || '-';
-              const id = t.properties?.ID?.number;
-              const dat = t.properties?.Data?.date?.start || '';
-              const obs = t.properties?.Observacao?.rich_text?.[0]?.text?.content || '';
-              const df = dat ? fmtData(dat) : '';
-              txt += '\n' + (id ? '#'+id+' ' : '') + '*' + titulo + '*';
-              if (df) txt += '\n📅 ' + df;
-              if (obs) txt += '\n💬 _' + obs + '_';
-              txt += '\n';
-            });
-            res = txt.trim();
-          }
-          listaCache = res;
 
         } else if (blk.name === 'buscar_por_conteudo') {
           const todas = await buscarTarefas(null); // busca em todos os grupos
