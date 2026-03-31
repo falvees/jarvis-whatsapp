@@ -545,7 +545,8 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           const obs = inp.observacao ? '\n💬 Obs: ' + inp.observacao : '';
           const prio = inp.prioridade && inp.prioridade !== 'Normal' ? '\n⚡ Prioridade: ' + inp.prioridade : '';
           const idLabel = novoIdNum ? '\n🔢 ID: #'+novoIdNum : '';
-          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prio+prazo+obs;
+          const respLabel = (inp.responsavel && inp.responsavel !== remetente) ? '\n👤 Responsável: '+inp.responsavel : '';
+          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prio+prazo+respLabel+obs;
           criacaoCache = res; // guardar para usar se IA reformatar
           cache = null; listaCache = null;
 
@@ -582,8 +583,9 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           }
 
         } else if (blk.name === 'arquivar_tarefa') {
-          if (!cache) cache = await buscarTarefas(grupo);
-          const nArq = parseInt(blk.input.identificador);
+          // Sempre faz fresh fetch para não depender de cache de outras operações
+          const cacheArq = await buscarTarefas(grupo);
+          const nArq = parseInt((blk.input.identificador||'').replace(/^#/,'').trim());
           // Buscar por ID (#5) ou número na lista ou nome
           let tArq = null;
           if (!isNaN(nArq)) {
