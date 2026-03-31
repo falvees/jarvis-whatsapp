@@ -571,7 +571,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           // Detectar tipo pelo texto original da mensagem se IA não passou filtro
           let tiposFiltro = inp_b.tipos || (inp_b.tipo ? [inp_b.tipo] : null);
           if (!tiposFiltro) {
-            const msgNorm = norm(mensagem);
+            const msgNorm = norm(texto);
             if (/\bnota(s)?\b|\banotac/.test(msgNorm)) tiposFiltro = ['Nota'];
             else if (/\bideia(s)?\b/.test(msgNorm)) tiposFiltro = ['Ideia'];
             else if (/\blembrete(s)?\b/.test(msgNorm)) tiposFiltro = ['Lembrete'];
