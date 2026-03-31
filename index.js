@@ -475,6 +475,15 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           res = formatarLista(cache);
           listaCache = res; // garantir fallback se IA reformatar
 
+        } else if (blk.name === 'resumo_tarefas') {
+          cache = await buscarTarefas(grupo);
+          if (!cache.length) {
+            await new Promise(r => setTimeout(r, 2000));
+            cache = await buscarTarefas(grupo);
+          }
+          res = formatarResumo(cache, grupoNome);
+          listaCache = res; // usar direto sem IA reformatar
+
         } else if (blk.name === 'criar_tarefa') {
           const inp = blk.input;
           const tipoSalvo = await criarTarefa({ titulo:inp.titulo, tipo:inp.tipo||'Tarefa',
@@ -482,7 +491,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
             data:inp.data, hora:inp.hora, prioridade:inp.prioridade||'Normal',
             observacao:inp.observacao, grupo:inp.grupo||grupo });
           const emoji = TIPO_EMOJI[tipoSalvo] || '✅';
-          const prazo = inp.data ? '\n📅 Prazo: ' + (inp.data === new Date().toISOString().slice(0,10) ? 'Hoje' : inp.data) + (inp.hora ? ' às ' + inp.hora + 'h' : '') : '';
+          const prazo = inp.data ? '\n📅 Prazo: ' + fmtData(inp.data + (inp.hora ? 'T' + inp.hora + ':00' : '')) : '';
           const obs = inp.observacao ? '\n💬 Obs: ' + inp.observacao : '';
           const prio = inp.prioridade && inp.prioridade !== 'Normal' ? '\n⚡ Prioridade: ' + inp.prioridade : '';
           res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+prio+prazo+obs;
