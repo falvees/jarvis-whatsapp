@@ -630,7 +630,10 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           const obsInvalida = !obsVal || /^[-—–]+$/.test(obsVal) || ['n/a','nenhuma','nenhum','none','null','-'].includes(obsVal.toLowerCase());
           const obs = obsInvalida ? '' : '\n💬 Obs: ' + obsVal;
           const prio = inp.prioridade && inp.prioridade !== 'Normal' ? '\n⚡ Prioridade: ' + inp.prioridade : '';
-          const respLabel = (inp.responsavel && inp.responsavel !== remetente) ? '\n👤 Responsável: '+inp.responsavel : '';
+          // Mostrar responsável se: é diferente do remetente OU tem múltiplos (vírgula)
+          const temMultiResp = inp.responsavel && inp.responsavel.includes(',');
+          const respDiferente = inp.responsavel && inp.responsavel.trim().toLowerCase() !== (remetente||'').trim().toLowerCase();
+          const respLabel = (temMultiResp || respDiferente) ? '\n👤 Responsável: '+inp.responsavel : '';
           const idLabel = novoIdNum ? ' *(#'+novoIdNum+')*' : '';
           res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prio+prazo+respLabel+obs;
           criacaoCache = res; // guardar para usar se IA reformatar
