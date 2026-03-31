@@ -22,6 +22,9 @@ const GRUPOS = {
   '120363329006221266@g.us': { grupo: 'Particular', nome: 'Agenda do dia' }
 };
 
+// Número do Felipe para @menção nas respostas
+const FELIPE_JID = '553491201226@s.whatsapp.net';
+
 const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
 // ─── Helpers HTTP ──────────────────────────────────────────────────────────────
@@ -224,9 +227,13 @@ async function transcreverAudio(buf) {
 }
 
 // ─── Enviar WhatsApp ───────────────────────────────────────────────────────────
-async function enviarMensagem(jid, texto) {
+async function enviarMensagem(jid, texto, mencionar) {
   const evoUrl = new URL(EVOLUTION_URL);
-  const body = JSON.stringify({ number: jid, text: '🤖 '+texto });
+  // Adicionar @menção se for grupo e tiver número configurado
+  const textoFinal = mencionar && FELIPE_JID ? texto + '\n@' + FELIPE_JID.replace('@s.whatsapp.net','') : texto;
+  const bodyObj = { number: jid, text: '🤖 ' + textoFinal };
+  if (mencionar && FELIPE_JID) bodyObj.mentions = [FELIPE_JID];
+  const body = JSON.stringify(bodyObj);
   await httpReq({
     protocol: evoUrl.protocol, hostname: evoUrl.hostname,
     port: evoUrl.port||(evoUrl.protocol==='http:'?80:443),
@@ -434,7 +441,7 @@ app.post('/webhook', async (req, res) => {
 
     console.log('[MSG] '+remetente+' ('+cfg.grupo+'): "'+texto+'"');
     const resposta = await agente({ texto, remetente, grupo:cfg.grupo, grupoNome:cfg.nome, isAudio });
-    await enviarMensagem(jid, resposta);
+    await enviarMensagem(jid, resposta, true); // mencionar Felipe em grupos
     console.log('[RESP] '+resposta.slice(0,100));
 
   } catch(e) { console.error('[ERROR]', e.message); }
