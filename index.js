@@ -95,18 +95,15 @@ const TIPO_EMOJI = { Tarefa: '📋', Nota: '📝', Ideia: '💡', Lembrete: '⏰
 // Counter em memória com mutex para evitar IDs duplicados em paralelo
 let _idCounter = null;
 let _idLock = Promise.resolve();
+const _criandoTitulos = new Set(); // anti-duplicação por título
 
 async function proximoId() {
-  // Serializar acesso para evitar race condition
   let resolveLock;
   const prevLock = _idLock;
   _idLock = new Promise(r => { resolveLock = r; });
-  
-  await prevLock; // aguardar lock anterior
-  
+  await prevLock;
   try {
     if (_idCounter === null) {
-      // Inicializar counter do Notion na primeira chamada
       const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', {
         sorts: [{ property: 'ID', direction: 'descending' }],
         page_size: 1
@@ -116,12 +113,21 @@ async function proximoId() {
     _idCounter += 1;
     return _idCounter;
   } finally {
-    resolveLock(); // liberar lock
+    resolveLock();
   }
 }
 
 async function criarTarefa({ titulo, tipo, responsavel, data, hora, prioridade, observacao, grupo }) {
   const tipoFinal = tipo || 'Tarefa';
+  // Anti-duplicação: se já está criando este título agora, aguardar e ignorar
+  const tituloKey = (grupo + '|' + titulo).toLowerCase().trim();
+  if (_criandoTitulos.has(tituloKey)) {
+    console.log('[DEDUP] Ignorando duplicata:', titulo);
+    return { tipo: tipoFinal, id: null, duplicata: true };
+  }
+  _criandoTitulos.add(tituloKey);
+  setTimeout(() => _criandoTitulos.delete(tituloKey), 30000); // limpar após 30s
+
   const novoId = await proximoId();
   const props = {
     Tarefa:      { title: [{ text: { content: titulo } }] },
@@ -406,7 +412,7 @@ const TOOLS = [
       properties: {
         titulo:      { type: 'string', description: 'Título do item' },
         tipo:        { type: 'string', enum: ['Tarefa','Nota','Ideia','Lembrete'], description: 'Tipo (padrão: Tarefa). Nota=anotação, Ideia=criativa, Lembrete=com data' },
-        responsavel: { type: 'string', description: 'Nome do responsável. EXTRAIA da mensagem se mencionado (ex: responsavel João, pra Adriane, para o Pedro)' },
+        responsavel: { type: 'string', description: 'Responsável(eis). EXTRAIA da mensagem. Múltiplos separados por vírgula. Ex: "resp Felipe e João"→"Felipe, João". Se não mencionado use o remetente.' },
         data:        { type: 'string', description: 'YYYY-MM-DD' },
         hora:        { type: 'string', description: 'HH:MM' },
         prioridade:  { type: 'string', enum: ['Normal','Urgente','Muito Urgente'] },
@@ -480,7 +486,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     '',
     'Entenda QUALQUER linguagem natural: gírias, erros, abreviações, informal.',
     'Tipos de item: Tarefa (padrão), Nota (📝 anotação), Ideia (💡 criativa), Lembrete (⏰ com data).',
-    'Responsável: SEMPRE extraia da mensagem se mencionado. Ex: "responsavel adriane"→responsavel:"Adriane", "pra o João"→responsavel:"João", "para Marcos"→responsavel:"Marcos". Se não mencionado, use o remetente.',
+    'Responsável: EXTRAIA da mensagem se mencionado. Múltiplos: "resp Felipe e João"→"Felipe, João", "para Adriane e Marcos"→"Adriane, Marcos". Se não mencionado, use o remetente.',
     'Concluir: quando pedir "concluir todas", "fechar tudo", "bora fechar", "conclui tudo" → passe identificadores:["todas"].',
     'Exemplos tipo: "anota aí..."→Nota, "tive uma ideia..."→Ideia, "me lembra amanhã..."→Lembrete.',
     'Exemplos: "bora fechar tudo" = concluir todas, "mete aí reunião amanhã" = criar tarefa.',
@@ -562,7 +568,17 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
       try {
         if (blk.name === 'buscar_tarefas') {
           const inp_b = blk.input || {};
-          const tiposFiltro = inp_b.tipos || (inp_b.tipo ? [inp_b.tipo] : null);
+          // Detectar tipo pelo texto original da mensagem se IA não passou filtro
+          let tiposFiltro = inp_b.tipos || (inp_b.tipo ? [inp_b.tipo] : null);
+          if (!tiposFiltro) {
+            const msgNorm = norm(mensagem);
+            if (/\bnota(s)?\b|\banotac/.test(msgNorm)) tiposFiltro = ['Nota'];
+            else if (/\bideia(s)?\b/.test(msgNorm)) tiposFiltro = ['Ideia'];
+            else if (/\blembrete(s)?\b/.test(msgNorm)) tiposFiltro = ['Lembrete'];
+            else if (/\btarefa(s)?\b|\bpendente(s)?\b/.test(msgNorm)) tiposFiltro = ['Tarefa'];
+            // "tarefas e ideias" etc
+            if (!tiposFiltro && /tarefa.*ideia|ideia.*tarefa/.test(msgNorm)) tiposFiltro = ['Tarefa','Ideia'];
+          }
           cache = await buscarTarefas(grupo, tiposFiltro);
           if (!cache.length && tiposFiltro) {
             await new Promise(r => setTimeout(r, 2000));
@@ -601,6 +617,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
             responsavel:inp.responsavel||remetente,
             data:inp.data, hora:inp.hora, prioridade:inp.prioridade||'Normal',
             observacao:inp.observacao, grupo:grupo }); // grupo SEMPRE do grupo de origem, nunca do usuário
+          if (criado.duplicata) { res = ''; break; } // ignorar duplicata silenciosamente
           const tipoSalvo = criado.tipo || criado; // compatibilidade
           const novoIdNum = criado.id || '';
           const emoji = TIPO_EMOJI[tipoSalvo] || '✅';
