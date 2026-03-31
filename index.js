@@ -628,14 +628,14 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
           const prazo = inp.data ? '\n📅 Prazo: ' + fmtData(inp.data + (inp.hora ? 'T' + inp.hora + ':00' : '')) : '';
           const obsVal = (inp.observacao||'').trim();
           const obsInvalida = !obsVal || /^[-—–]+$/.test(obsVal) || ['n/a','nenhuma','nenhum','none','null','-'].includes(obsVal.toLowerCase());
-          const obs = obsInvalida ? '' : '\n💬 Obs: ' + obsVal;
-          const prio = inp.prioridade && inp.prioridade !== 'Normal' ? '\n⚡ Prioridade: ' + inp.prioridade : '';
-          // Mostrar responsável se: é diferente do remetente OU tem múltiplos (vírgula)
-          const temMultiResp = inp.responsavel && inp.responsavel.includes(',');
-          const respDiferente = inp.responsavel && inp.responsavel.trim().toLowerCase() !== (remetente||'').trim().toLowerCase();
-          const respLabel = (temMultiResp || respDiferente) ? '\n👤 Responsável: '+inp.responsavel : '';
-          const idLabel = novoIdNum ? ' *(#'+novoIdNum+')*' : '';
-          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prio+prazo+respLabel+obs;
+          // Montar resposta completa com TODOS os dados
+          const idLabel   = novoIdNum ? ' *(#'+novoIdNum+')*' : '';
+          const prioLabel = '\n⚡ Prioridade: ' + (inp.prioridade || 'Normal');
+          const prazoLabel = prazo || '\n📅 Prazo: Sem prazo';
+          const respLabel = '\n👤 Responsável: ' + (inp.responsavel || remetente);
+          const grupoLabel = '\n📌 Grupo: ' + (inp.grupo || grupo);
+          const obsLabel  = obsInvalida ? '' : '\n💬 Obs: ' + obsVal;
+          res = emoji+' *'+tipoSalvo+' criada*\n*'+inp.titulo+'*'+idLabel+prioLabel+prazoLabel+respLabel+grupoLabel+obsLabel;
           criacaoCache = res; // guardar para usar se IA reformatar
           cache = null; listaCache = null;
 
