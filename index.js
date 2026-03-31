@@ -87,14 +87,32 @@ async function buscarTarefas(grupoFiltro) {
 // Emojis por tipo de item
 const TIPO_EMOJI = { Tarefa: '📋', Nota: '📝', Ideia: '💡', Lembrete: '⏰' };
 
-// Pegar próximo ID sequencial
+// Counter em memória com mutex para evitar IDs duplicados em paralelo
+let _idCounter = null;
+let _idLock = Promise.resolve();
+
 async function proximoId() {
-  const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', {
-    sorts: [{ property: 'ID', direction: 'descending' }],
-    page_size: 1
-  });
-  const ultimo = d.results?.[0]?.properties?.ID?.number || 0;
-  return ultimo + 1;
+  // Serializar acesso para evitar race condition
+  let resolveLock;
+  const prevLock = _idLock;
+  _idLock = new Promise(r => { resolveLock = r; });
+  
+  await prevLock; // aguardar lock anterior
+  
+  try {
+    if (_idCounter === null) {
+      // Inicializar counter do Notion na primeira chamada
+      const d = await notionReq('/v1/databases/' + NOTION_DB + '/query', 'POST', {
+        sorts: [{ property: 'ID', direction: 'descending' }],
+        page_size: 1
+      });
+      _idCounter = (d.results?.[0]?.properties?.ID?.number || 0);
+    }
+    _idCounter += 1;
+    return _idCounter;
+  } finally {
+    resolveLock(); // liberar lock
+  }
 }
 
 async function criarTarefa({ titulo, tipo, responsavel, data, hora, prioridade, observacao, grupo }) {
