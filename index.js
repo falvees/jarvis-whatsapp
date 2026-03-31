@@ -160,8 +160,19 @@ async function downloadAudio(url) {
 }
 
 function decryptAudio(encBuf, mediaKeyObj) {
-  const mkArr = Object.keys(mediaKeyObj).sort((a,b)=>Number(a)-Number(b)).map(k=>mediaKeyObj[k]);
-  const mediaKey = Buffer.from(mkArr);
+  // mediaKey pode ser Buffer, Uint8Array ou objeto {0:byte, 1:byte...}
+  let mediaKey;
+  if (Buffer.isBuffer(mediaKeyObj)) {
+    mediaKey = mediaKeyObj;
+  } else if (mediaKeyObj instanceof Uint8Array) {
+    mediaKey = Buffer.from(mediaKeyObj);
+  } else if (typeof mediaKeyObj === 'object') {
+    const mkArr = Object.keys(mediaKeyObj).sort((a,b)=>Number(a)-Number(b)).map(k=>mediaKeyObj[k]);
+    mediaKey = Buffer.from(mkArr);
+  } else {
+    throw new Error('mediaKey formato desconhecido: ' + typeof mediaKeyObj);
+  }
+  console.log('[AUDIO] mediaKey length:', mediaKey.length, 'encBuf length:', encBuf.length);
   const km = crypto.hkdfSync('sha256',mediaKey,Buffer.alloc(32),Buffer.from('WhatsApp Audio Keys'),112);
   const dec = crypto.createDecipheriv('aes-256-cbc',Buffer.from(km.slice(16,48)),Buffer.from(km.slice(0,16)));
   dec.setAutoPadding(true);
@@ -180,7 +191,7 @@ async function transcreverAudio(buf) {
   ]);
   const r = await httpReq({hostname:'api.groq.com',path:'/openai/v1/audio/transcriptions',method:'POST',
     headers:{'Authorization':'Bearer '+GROQ_KEY,'Content-Type':'multipart/form-data; boundary='+b,'Content-Length':body.length}},body);
-  if (r.status!==200) throw new Error('Groq '+r.status);
+  if (r.status!==200) throw new Error('Groq '+r.status+': '+r.body.slice(0,200));
   return (JSON.parse(r.body).text||'').trim();
 }
 
@@ -387,7 +398,7 @@ app.post('/webhook', async (req, res) => {
         if (!texto) { await enviarMensagem(jid,'Não consegui ouvir o áudio. Pode escrever?'); return; }
         console.log('[AUDIO] '+remetente+': "'+texto+'"');
       } catch(e) {
-        console.error('[AUDIO ERROR]', e.message);
+        console.error('[AUDIO ERROR]', e.message); console.error('[AUDIO ERROR STACK]', e.stack?.slice(0,300));
         await enviarMensagem(jid,'Erro no áudio. Tente escrever a mensagem.');
         return;
       }
