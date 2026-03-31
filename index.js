@@ -480,7 +480,7 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
       let res = '';
       try {
         if (blk.name === 'buscar_tarefas') {
-          cache = await buscarTarefas();
+          cache = await buscarTarefas(grupo);
           res = formatarLista(cache);
 
         } else if (blk.name === 'criar_tarefa') {
