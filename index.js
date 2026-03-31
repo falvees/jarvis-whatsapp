@@ -206,8 +206,11 @@ function formatarLista(tarefas, tituloCustom) {
   const sorted = [...tarefas].sort((a,b) => pw(a.properties?.Prioridade?.select?.name)-pw(b.properties?.Prioridade?.select?.name));
   const titulo = tituloCustom ? tituloCustom.charAt(0).toUpperCase()+tituloCustom.slice(1) : 'Tarefas';
   const qtd = sorted.length;
+  // Emoji baseado no tipo
+  const tipoEmojis = {'Tarefas':'📋','Notas':'📝','Ideias':'💡','Lembretes':'⏰'};
+  const hEmoji = tipoEmojis[titulo] || '📋';
   const plural = qtd === 1 ? 'aberta' : 'abertas';
-  let txt = '📋 *'+titulo+' · '+qtd+' '+plural+'*\n';
+  let txt = hEmoji+' *'+titulo+' · '+qtd+' '+plural+'*\n';
   sorted.forEach((t,i) => {
     const titulo = t.properties?.Tarefa?.title?.[0]?.text?.content||'-';
     const resp   = t.properties?.Responsavel?.rich_text?.[0]?.text?.content||'-';
@@ -492,14 +495,12 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
     'Exemplos: "bora fechar tudo" = concluir todas, "mete aí reunião amanhã" = criar tarefa.',
     'Se múltiplos itens a criar, chame criar_tarefa UMA VEZ POR ITEM.',
     'Chame buscar_tarefas SEMPRE antes de listar/concluir/atualizar.',
-    'FILTRO DE TIPO OBRIGATÓRIO: SEMPRE passe o campo "tipos" em buscar_tarefas baseado no comando:',
-    '  "tarefas" → tipos:["Tarefa"]',
-    '  "notas" ou "anotações" → tipos:["Nota"]',
-    '  "ideias" → tipos:["Ideia"]',
-    '  "lembretes" → tipos:["Lembrete"]',
-    '  "tarefas e ideias" → tipos:["Tarefa","Ideia"]',
-    '  "tudo", "lista geral", "o que tem" → omitir tipos (sem filtro)',
-    'Também aceita: responsavel (nome) e prioridade (Normal/Urgente/Muito Urgente).','''
+    'FILTRO DE TIPO — passe "tipos" baseado no que foi pedido:',
+    '  "tarefas"→["Tarefa"] | "notas"→["Nota"] | "ideias"→["Ideia"] | "lembretes"→["Lembrete"]',
+    '  "tarefas e ideias"→["Tarefa","Ideia"] | "tudo"/"lista geral"→omitir tipos',
+    'CRÍTICO: chame buscar_tarefas UMA ÚNICA VEZ por mensagem, mesmo para múltiplos tipos.',
+    'NUNCA chame buscar_tarefas duas vezes. Combine tudo em uma chamada com o array tipos.',
+    'Também aceita: responsavel (nome) e prioridade (Normal/Urgente/Muito Urgente).',
     'Para buscar por conteúdo: buscar_por_conteudo. Para apagar/arquivar: arquivar_tarefa.',
     'Para listar por tipo (notas/ideias/lembretes/tarefas): use listar_por_tipo. Ex: "mostrar notas"→listar_por_tipo(tipo:Nota).',
     'SEGURANÇA: O grupo de uma tarefa é SEMPRE o grupo de origem da mensagem. NUNCA use grupo diferente.',
@@ -568,16 +569,18 @@ async function agente({ texto, remetente, grupo, grupoNome, isAudio }) {
       try {
         if (blk.name === 'buscar_tarefas') {
           const inp_b = blk.input || {};
-          // Detectar tipo pelo texto original da mensagem se IA não passou filtro
+          // Detectar tipo pelo texto original da mensagem
           let tiposFiltro = inp_b.tipos || (inp_b.tipo ? [inp_b.tipo] : null);
           if (!tiposFiltro) {
             const msgNorm = norm(texto);
-            if (/\bnota(s)?\b|\banotac/.test(msgNorm)) tiposFiltro = ['Nota'];
-            else if (/\bideia(s)?\b/.test(msgNorm)) tiposFiltro = ['Ideia'];
-            else if (/\blembrete(s)?\b/.test(msgNorm)) tiposFiltro = ['Lembrete'];
-            else if (/\btarefa(s)?\b|\bpendente(s)?\b/.test(msgNorm)) tiposFiltro = ['Tarefa'];
-            // "tarefas e ideias" etc
-            if (!tiposFiltro && /tarefa.*ideia|ideia.*tarefa/.test(msgNorm)) tiposFiltro = ['Tarefa','Ideia'];
+            const tipos_detectados = [];
+            if (/\btarefa(s)?\b|\bpendente(s)?\b/.test(msgNorm)) tipos_detectados.push('Tarefa');
+            if (/\bnota(s)?\b|\banotac/.test(msgNorm)) tipos_detectados.push('Nota');
+            if (/\bideia(s)?\b/.test(msgNorm)) tipos_detectados.push('Ideia');
+            if (/\blembrete(s)?\b/.test(msgNorm)) tipos_detectados.push('Lembrete');
+            if (tipos_detectados.length > 0) tiposFiltro = tipos_detectados;
+            // "tudo", "lista", "o que tem" → sem filtro
+            if (/\btudo\b|\blista geral\b|\bo que tem\b/.test(msgNorm)) tiposFiltro = null;
           }
           cache = await buscarTarefas(grupo, tiposFiltro);
           if (!cache.length && tiposFiltro) {
