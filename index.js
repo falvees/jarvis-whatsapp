@@ -321,29 +321,14 @@ async function transcreverAudio(buf) {
 }
 
 // ─── Enviar WhatsApp ───────────────────────────────────────────────────────────
-async function enviarMensagem(jid, texto, mencionar) {
+async function enviarMensagem(jid, texto) {
   const evoUrl = new URL(EVOLUTION_URL);
-  const isGroup = jid.endsWith('@g.us');
-  // Usar endpoint correto para mensagem com menção
-  let path, bodyObj;
-  if (mencionar && isGroup && FELIPE_JID) {
-    // Endpoint de menção da Evolution API v2
-    path = '/message/sendText/' + INSTANCE;
-    bodyObj = {
-      number: jid,
-      text: '🤖 ' + texto,
-      mentioned: [FELIPE_LID]  // LID = formato interno WhatsApp para notificação
-    };
-    console.log('[SEND] mencionando:', FELIPE_JID);
-  } else {
-    path = '/message/sendText/' + INSTANCE;
-    bodyObj = { number: jid, text: '🤖 ' + texto };
-  }
+  const bodyObj = { number: jid, text: '🤖 ' + texto };
   const body = JSON.stringify(bodyObj);
   await httpReq({
     protocol: evoUrl.protocol, hostname: evoUrl.hostname,
     port: evoUrl.port||(evoUrl.protocol==='http:'?80:443),
-    path, method: 'POST',
+    path: '/message/sendText/' + INSTANCE, method: 'POST',
     headers: {'apikey':EVOLUTION_KEY,'Content-Type':'application/json','Content-Length':Buffer.byteLength(body)}
   }, body);
 }
@@ -604,7 +589,7 @@ app.post('/webhook', async (req, res) => {
 
     console.log('[MSG] '+remetente+' ('+cfg.grupo+'): "'+texto+'"');
     const resposta = await agente({ texto, remetente, grupo:cfg.grupo, grupoNome:cfg.nome, isAudio });
-    await enviarMensagem(jid, resposta, true); // mencionar Felipe em grupos
+    await enviarMensagem(jid, resposta);
     console.log('[RESP] '+resposta.slice(0,100));
 
   } catch(e) { console.error('[ERROR]', e.message); }
