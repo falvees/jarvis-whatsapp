@@ -25,7 +25,6 @@ const GRUPOS = {
 // JIDs do Felipe para @menção (LID = formato interno do WhatsApp)
 const FELIPE_LID = '41098558865548@lid';
 const FELIPE_JID = '553491201226@s.whatsapp.net';
-const FELIPE_LID = '41098558865548@lid';
 
 const client = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
